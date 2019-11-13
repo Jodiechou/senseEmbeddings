@@ -1,5 +1,6 @@
 # Sense embeddings
-## Table of Contents
+Table of Contents
+=================
 * [q](#Installation)
 
 ## Installation
