@@ -4,7 +4,7 @@
 
    * [Dependencise](#dependencise)
    * [Installation](#installation)
-   * [Obtain contextualised embeddings using BERT](#contextualised embeddings)
+   * [Obtain contextualised embeddings using BERT](#Obtain contextualised embeddings using BERT)
 
 ## Dependencise
 - Pytorch
