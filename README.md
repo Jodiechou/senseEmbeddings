@@ -2,7 +2,14 @@
 
 ## Table of Contents
 
+   * [Dependencise](#dependencise)
    * [Installation](#installation)
+   * [Obtain contextualised embeddings using BERT](#contextualised embeddings)
+
+## Dependencise
+- Pytorch
+- Numpy
+- [bert-as-service](#https://github.com/hanxiao/bert-as-service)
 
 ## Installation
 ### Packages
@@ -11,6 +18,7 @@ To install additional packages used by this project run:
 $ pip install bert-serving-server server 
 $ pip3  install  bert-serving-client  client  #independent of 'bert-serving-server'
 ```
+Note that the server MUST be running on Python>=3.5 with Tensorflow>=1.10.
 ### External Data
 Download pre-trained BERT (large-cased)
 ```
@@ -31,4 +39,6 @@ $ cd external/wsd_eval  # from repo home
 $ wget http://lcl.uniroma1.it/wsdeval/data/WSD_Evaluation_Framework.zip
 $ unzip WSD_Evaluation_Framework.zip
 ```
-## Experiment
+## Obtain contextualised embeddings using BERT
+### Loading BERT
+
