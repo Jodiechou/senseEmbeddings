@@ -9,7 +9,7 @@
 ## Dependencise
 - Pytorch
 - Numpy
-- [bert-as-service](#https://github.com/hanxiao/bert-as-service)
+- [bert-as-service](https://github.com/hanxiao/bert-as-service)
 
 ## Installation
 ### Packages
