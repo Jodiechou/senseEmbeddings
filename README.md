@@ -43,7 +43,7 @@ $ unzip WSD_Evaluation_Framework.zip
 ### Loading BERT
 If ```~/.local/bin``` is not on your path, then do this in your .profile or something that gets loaded by your shell:
 ```
-export PATH=~/.local/bin:$PATH
+$ export PATH=~/.local/bin:$PATH
 ```
 Start the bert service using this:
 ```
@@ -55,3 +55,28 @@ I:VENTILATOR:[__i:_ru:163]:all set, ready to serve request!
 ```
 
 Now you need to leave this process running in this session and open a new session (i.e. new terminal or tab), return to the repository, and continue.
+
+### Get BERT embeddings and GloVe embeddings
+Usage descriptions:
+```
+Create Initial Sense Embeddings.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -wsd_fw_path WSD_FW_PATH
+                        Path to WSD Evaluation Framework (default: external/wsd_eval/WSD_Evaluation_Framework/)
+  -dataset {semcor,semcor_omsti}
+                        Name of dataset (default: semcor)
+  -batch_size BATCH_SIZE
+                        Batch size (BERT) (default: 32)
+  -max_seq_len MAX_SEQ_LEN
+                        Maximum sequence length (BERT) (default: 512)
+  -merge_strategy {mean,first,sum}
+                        WordPiece Reconstruction Strategy (default: mean)
+  -max_instances MAX_INSTANCES
+                        Maximum number of examples for each sense (default: inf)
+```
+Get embeddings by runing word_embed.py 
+```
+$ python word_embed.py
+```
