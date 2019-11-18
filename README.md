@@ -56,7 +56,7 @@ I:VENTILATOR:[__i:_ru:163]:all set, ready to serve request!
 
 Now you need to leave this process running in this session and open a new session (i.e. new terminal or tab), return to the repository, and continue.
 
-### Get BERT embeddings and GloVe embeddings
+### Get BERT and GloVe embeddings
 Usage descriptions:
 ```
 Create Initial Sense Embeddings.
