@@ -48,7 +48,7 @@ After the server finishes preparing BERT for inference, you should see a message
 ```
 I:VENTILATOR:[__i:_ru:163]:all set, ready to serve request!
 ```
-If ```~/.local/bin is``` not on your path, then do this in your .profile or something that gets loaded by your shell:
+If ```~/.local/bin``` is not on your path, then do this in your .profile or something that gets loaded by your shell:
 ```
 export PATH=~/.local/bin:$PATH
 ```
