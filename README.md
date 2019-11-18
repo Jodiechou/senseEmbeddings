@@ -48,8 +48,7 @@ After the server finishes preparing BERT for inference, you should see a message
 ```
 I:VENTILATOR:[__i:_ru:163]:all set, ready to serve request!
 ```
-If get an error states that "bert-serving-start: command not found"
-Reset the path using this comment:
+If you get an error states that "bert-serving-start: command not found", then reset the path using this comment:
 ```
 export PATH=~/.local/bin:$PATH
 ```
