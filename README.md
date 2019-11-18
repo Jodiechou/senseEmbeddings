@@ -23,14 +23,14 @@ Note that the server MUST be running on Python>=3.5 with Tensorflow>=1.10.
 Download pre-trained BERT (large-cased)
 ```
 $ cd external/bert  # from repo home
-$ wget https://storage.googleapis.com/bert_models/2018_10_18/cased_L-24_H-1024_A-16.zip
-$ unzip cased_L-24_H-1024_A-16.zip
+$ wget https://storage.googleapis.com/bert_models/2019_05_30/wwm_cased_L-24_H-1024_A-16.zip
+$ unzip wwm_cased_L-24_H-1024_A-16.zip
 ```
 Download pre-trained GloVe (Common Crawl, 840B tokens)
 ```
 $ cd external/bert  # from repo home
 $ wget http://nlp.stanford.edu/data/glove.840B.300d.zip
-$ unzip cased_L-24_H-1024_A-16.zip
+$ unzip glove.840B.300d.zip
 ```
 
 Download the WSD Evaluation Framework
