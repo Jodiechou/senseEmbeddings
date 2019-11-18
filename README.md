@@ -42,10 +42,15 @@ $ unzip WSD_Evaluation_Framework.zip
 ## Obtain contextualised embeddings using BERT
 ### Loading BERT
 ```
-$ bert-serving-start -pooling_strategy NONE -model_dir external/bert/cased_L-24_H-1024_A-16 -pooling_layer -1 -2 -3 -4 -max_seq_len 512 -max_batch_size 32 -num_worker=1 -device_map 0 -cased_tokenization
+$ bert-serving-start -pooling_strategy NONE -model_dir external/bert/wwm_cased_L-24_H-1024_A-16 -pooling_layer -1 -2 -3 -4 -max_seq_len 512 -max_batch_size 32 -num_worker=1 -device_map 0 -cased_tokenization
 ```
 After the server finishes preparing BERT for inference, you should see a message like this:
 ```
 I:VENTILATOR:[__i:_ru:163]:all set, ready to serve request!
+```
+If get an error states that "bert-serving-start: command not found"
+Reset the path using this comment:
+```
+export PATH=~/.local/bin:$PATH
 ```
 Now you need to leave this process running in this session and open a new session (i.e. new terminal or tab), return to the repository, and continue.
