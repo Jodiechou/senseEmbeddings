@@ -4,7 +4,7 @@
 
    * [Dependencise](#dependencise)
    * [Installation](#installation)
-   * [Obtain contextualised embeddings using BERT](#obtain-contextualised-embeddings-using-BERT)
+   * [Obtain contextualised and word embeddings](#obtain-contextualised-and-word-embeddings)
 
 ## Dependencise
 - Pytorch
@@ -39,7 +39,7 @@ $ cd external/wsd_eval  # from repo home
 $ wget http://lcl.uniroma1.it/wsdeval/data/WSD_Evaluation_Framework.zip
 $ unzip WSD_Evaluation_Framework.zip
 ```
-## Obtain contextualised embeddings using BERT
+## Obtain contextualised and word embeddings
 ### Loading BERT
 If ```~/.local/bin``` is not on your path, then do this in your .profile or something that gets loaded by your shell:
 ```
