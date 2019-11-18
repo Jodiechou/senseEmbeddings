@@ -45,7 +45,7 @@ If ```~/.local/bin``` is not on your path, then do this in your .profile or some
 ```
 export PATH=~/.local/bin:$PATH
 ```
-
+Start the bert service using this:
 ```
 $ bert-serving-start -pooling_strategy NONE -model_dir external/bert/wwm_cased_L-24_H-1024_A-16 -pooling_layer -1 -2 -3 -4 -max_seq_len 512 -max_batch_size 32 -num_worker=1 -device_map 0 -cased_tokenization
 ```
