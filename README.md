@@ -76,7 +76,7 @@ optional arguments:
   -max_instances MAX_INSTANCES
                         Maximum number of examples for each sense (default: inf)
 ```
-Get embeddings by runing word_embed.py 
+Get contextualised and word embeddings by runing this:
 ```
 $ python word_embed.py
 ```
