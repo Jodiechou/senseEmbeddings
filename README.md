@@ -28,7 +28,7 @@ $ unzip wwm_cased_L-24_H-1024_A-16.zip
 ```
 Download pre-trained GloVe (Common Crawl, 840B tokens)
 ```
-$ cd external/bert  # from repo home
+$ cd external/glove  # from repo home
 $ wget http://nlp.stanford.edu/data/glove.840B.300d.zip
 $ unzip glove.840B.300d.zip
 ```
