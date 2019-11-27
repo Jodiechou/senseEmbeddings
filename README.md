@@ -80,3 +80,8 @@ Get contextualised and word embeddings by runing this:
 ```
 $ python word_embed.py
 ```
+## Train the model
+After obtaining word embeddings and contextualised embeddings, we can train the model using this:
+```
+$ python train.py
+```
