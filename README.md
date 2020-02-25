@@ -23,8 +23,8 @@ Note that the server MUST be running on Python>=3.5 with Tensorflow>=1.10.
 Download pre-trained BERT (large-cased)
 ```
 $ cd external/bert  # from repo home
-$ wget https://storage.googleapis.com/bert_models/2019_05_30/wwm_cased_L-24_H-1024_A-16.zip
-$ unzip wwm_cased_L-24_H-1024_A-16.zip
+$ wget https://storage.googleapis.com/bert_models/2018_10_18/cased_L-24_H-1024_A-16.zip
+$ unzip cased_L-24_H-1024_A-16.zip
 ```
 Download pre-trained GloVe (Common Crawl, 840B tokens)
 ```
@@ -47,7 +47,7 @@ $ export PATH=~/.local/bin:$PATH
 ```
 Start the bert service using this:
 ```
-$ bert-serving-start -pooling_strategy NONE -model_dir external/bert/wwm_cased_L-24_H-1024_A-16 -pooling_layer -1 -2 -3 -4 -max_seq_len 512 -max_batch_size 32 -num_worker=1 -device_map 0 -cased_tokenization
+$ bert-serving-start -pooling_strategy NONE -model_dir external/bert/cased_L-24_H-1024_A-16 -pooling_layer -1 -2 -3 -4 -max_seq_len 512 -max_batch_size 32 -num_worker=1 -device_map 0 -cased_tokenization
 ```
 After the server finishes preparing BERT for inference, you should see a message like this:
 ```
