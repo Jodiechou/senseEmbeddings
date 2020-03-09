@@ -83,5 +83,10 @@ $ python word_embed.py
 ## Train the model
 After obtaining word embeddings and contextualised embeddings, we can train the model using this:
 ```
-$ python train.py
+$ python train_linear.py
+```
+
+## Evaluation
+```
+$ python eval.py
 ```
