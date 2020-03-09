@@ -5,6 +5,8 @@
    * [Dependencise](#dependencise)
    * [Installation](#installation)
    * [Obtain contextualised and word embeddings](#obtain-contextualised-and-word-embeddings)
+   * [Train the model](#train-the-model)
+   * [Evaluation](#evaluation)
 
 ## Dependencise
 - Pytorch
