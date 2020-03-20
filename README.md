@@ -90,5 +90,5 @@ $ python train_linear.py
 
 ## Evaluation
 ```
-$  python eval.py -sv_path data/vectors/senseEmbed.semcor.300.txt -test_set semeval2007
+$  python eval.py -sv_path data/vectors/senseEmbed.semcor_300.txt -test_set semeval2007
 ```
