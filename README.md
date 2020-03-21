@@ -90,5 +90,35 @@ $ python train_linear.py
 
 ## Evaluation
 ```
+$  python eval.py -h
+usage: eval.py [-h] -sv_path SV_PATH [--load_weight_path LOAD_WEIGHT_PATH]
+               [-wsd_fw_path WSD_FW_PATH]
+               [-test_set {senseval2,senseval3,semeval2007,semeval2013,semeval2015,ALL}]
+               [-batch_size BATCH_SIZE] [-merge_strategy MERGE_STRATEGY]
+               [-ignore_lemma] [-ignore_pos] [-thresh THRESH] [-k K] [-quiet]
+
+WSD Evaluation.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -sv_path SV_PATH      Path to sense vectors (default: None)
+  --load_weight_path LOAD_WEIGHT_PATH
+  -wsd_fw_path WSD_FW_PATH
+                        Path to WSD Evaluation Framework (default:
+                        external/wsd_eval/WSD_Evaluation_Framework/)
+  -test_set {senseval2,senseval3,semeval2007,semeval2013,semeval2015,ALL}
+                        Name of test set (default: ALL)
+  -batch_size BATCH_SIZE
+                        Batch size (BERT) (default: 32)
+  -merge_strategy MERGE_STRATEGY
+                        WordPiece Reconstruction Strategy (default: mean)
+  -ignore_lemma         Ignore lemma features (default: True)
+  -ignore_pos           Ignore POS features (default: True)
+  -thresh THRESH        Similarity threshold (default: -1)
+  -k K                  Number of Neighbors to accept (default: 1)
+  -quiet                Less verbose (debug=False) (default: True)
+
+```
+```
 $  python eval.py -sv_path data/vectors/senseEmbed.semcor_300.txt -test_set semeval2007
 ```
