@@ -187,8 +187,8 @@ if __name__ == '__main__':
 			optimizer.step()
 
 			embed = torch.matmul(wordEmbed, matrix_A_temp)
-			embeds[i-args.bsize:args.bsize] = embed.cpu().detach().numpy()
-			matrix_A[i-args.bsize:args.bsize] = matrix_A_temp.cpu().detach().numpy()
+			embeds[i-args.bsize:i] = embed.cpu().detach().numpy()
+			matrix_A[i-args.bsize:i] = matrix_A_temp.cpu().detach().numpy()
 
 		average_loss = 	loss_sum / num_batches
 		print("epoch: %d, loss: %f " %(epoch, loss_sum))
