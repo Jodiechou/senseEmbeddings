@@ -139,7 +139,7 @@ $ unzip WiC_dataset.zip
 # Sense Comparison
 To evaluate sense comparison, use:
 ```
-$ python wic/eval_wic_compare.py -sv_path data/vectors/senseEmbed.semcor_300.txt -eval_set dev
+$ python eval_wic.py -sv_path data/vectors/senseEmbed.semcor_300.txt -eval_set dev
 ```
 
 
