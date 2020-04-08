@@ -88,7 +88,7 @@ After obtaining word embeddings and contextualised embeddings, we can train the 
 $ python train_linear.py
 ```
 
-## Evaluation
+## WSD Evaluation
 ```
 $  python eval.py -h
 usage: eval.py [-h] -sv_path SV_PATH [--load_weight_path LOAD_WEIGHT_PATH]
@@ -122,3 +122,19 @@ optional arguments:
 ```
 $  python eval.py -sv_path data/vectors/senseEmbed.semcor_300.txt -test_set semeval2007
 ```
+
+## SCWS Evaluation
+To evaluate on SCWS dataset by running this:
+```
+$ python eval_scws.py -sv_path data/vectors/senseEmbed.semcor_300.txt
+```
+
+## WiC evaluation
+You'll need to download the WiC dataset and place it in 'external/wic/':
+```
+$ cd external/wic
+$ wget https://pilehvar.github.io/wic/package/WiC_dataset.zip
+$ unzip WiC_dataset.zip
+```
+
+
