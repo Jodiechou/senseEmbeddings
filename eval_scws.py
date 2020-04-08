@@ -134,26 +134,6 @@ def load_eval_scws_set():
 	return instance
 
 
-def load_senseEmbeddings(path):
-	logging.info("Loading Pre-trained Sense Embeddings ...")
-	embed_sense = {}
-	with open(path, 'r') as sfile:
-		for line in sfile:
-			splitLine = line.split(' ')
-			sense = splitLine[0]
-			vec_sense = np.array(splitLine[1:], dtype='float32')
-			embed_sense[sense] = vec_sense
-	logging.info("Done. Loaded %d words from Pre-trained Sense Embeddings" % len(embed_sense))
-	return embed_sense
-
-
-def load_weight(path):
-	logging.info("Loading Model Parameters W ...")
-	weight = np.load(path)
-	weight = np.array(weight)
-	logging.info('Loaded Model Parameters W')
-	return weight
-
 
 
 if __name__ == '__main__':
