@@ -90,7 +90,7 @@ $ python train_linear.py
 
 ## WSD Evaluation
 ```
-$  python eval.py -h
+$ python eval.py -h
 usage: eval.py [-h] -sv_path SV_PATH [--load_weight_path LOAD_WEIGHT_PATH]
                [-wsd_fw_path WSD_FW_PATH]
                [-test_set {senseval2,senseval3,semeval2007,semeval2013,semeval2015,ALL}]
@@ -136,5 +136,11 @@ $ cd external/wic
 $ wget https://pilehvar.github.io/wic/package/WiC_dataset.zip
 $ unzip WiC_dataset.zip
 ```
+# Sense Comparison
+To evaluate sense comparison, use:
+```
+$ python wic/eval_wic_compare.py -sv_path data/vectors/senseEmbed.semcor_300.txt -eval_set dev
+```
+
 
 
