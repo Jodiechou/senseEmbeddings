@@ -239,7 +239,7 @@ if __name__ == '__main__':
 			print('cos_sim', cos_sim)
 			similarities.append(cos_sim)
 
-			curr_rating = sent[4]
+			curr_rating = float(sent[4])
 			human_ratings.append(curr_rating)
 
 	# Compute the Spearman Rank and Pearson Correlation Coefficient against human ratings
