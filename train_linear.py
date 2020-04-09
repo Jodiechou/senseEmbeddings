@@ -61,7 +61,7 @@ def get_args(
 def load_glove_embeddings(fn):
 	embed_g = []
 	senses = []
-	symbols = [",", "+", "'", 'th', ':', '%']
+	symbols = [",", "+", "'", ':', '%']
 
 	with open(fn, 'r') as gfile:
 		for line in gfile:
@@ -94,7 +94,7 @@ def load_glove_embeddings(fn):
 
 def load_bert_embeddings(fn):
 	embed_c = []
-	symbols = [",", "+", "'", 'th', ':', '%']
+	symbols = [",", "+", "'", ':', '%']
 
 	with open(fn, 'r') as cfile:
 		for line in cfile:
