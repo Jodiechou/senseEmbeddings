@@ -61,6 +61,16 @@ def get_args(
 def load_glove_embeddings(fn):
 	embed_g = []
 	senses = []
+	with open(fn, 'r') as gfile:
+		for line in gfile:
+			splitLine = line.split(' ')
+			sense = splitLine[0]
+			vec_g = np.array(splitLine[1:], dtype='float32')
+			senses.append(sense)
+			embed_g.append(vec_g)
+	return embed_g, senses
+
+	'''
 	symbols = [",", "+", "'", ':', '%']
 
 	with open(fn, 'r') as gfile:
@@ -90,10 +100,19 @@ def load_glove_embeddings(fn):
 			senses.append(sense_word)
 			embed_g.append(sense_vec)
 	return embed_g, senses
+	'''
 
 
 def load_bert_embeddings(fn):
 	embed_c = []
+	with open(fn, 'r') as cfile:
+		for line in cfile:
+			splitLine = line.split(' ')
+			vec_c = np.array(splitLine[1:], dtype='float32')
+			embed_c.append(vec_c)
+	return embed_c
+	
+	'''
 	symbols = [",", "+", "'", ':', '%']
 
 	with open(fn, 'r') as cfile:
@@ -114,6 +133,7 @@ def load_bert_embeddings(fn):
 			bert_vec = [float(i) for i in  splitLine[end_idx:]]
 			embed_c.append(bert_vec)
 	return embed_c
+	'''
 
 
 def lossFunctions(z):
