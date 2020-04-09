@@ -71,7 +71,7 @@ def load_glove_embeddings(fn):
 			end_idx = 0
 
 			for chars in splitLine:
-				if any(c.isalpha() for c in chars) or chars in symbols or len(chars) < 4 or ':' in chars:
+				if any(c.isalpha() for c in chars) or chars in symbols or len(chars) < 4:
 					if end_idx > 0:
 						sense_word += " " + chars
 					else:
@@ -102,7 +102,7 @@ def load_bert_embeddings(fn):
 			sense_word = ''
 			end_idx = 0
 			for chars in splitLine:
-				if any(c.isalpha() for c in chars) or chars in symbols or len(chars) < 4 or '1:23:00::' in chars:
+				if any(c.isalpha() for c in chars) or chars in symbols or len(chars) < 4:
 					if end_idx > 0:
 						sense_word += " " + chars
 					else:
