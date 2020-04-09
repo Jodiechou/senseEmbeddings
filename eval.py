@@ -9,6 +9,7 @@ from collections import Counter
 import xml.etree.ElementTree as ET
 
 import numpy as np
+from numpy.linalg import norm
 from nltk.corpus import wordnet as wn
 
 from bert_as_service import bert_embed
@@ -248,10 +249,11 @@ if __name__ == '__main__':
 							index = sen2idx[1]
 							senseVec = vectors[index]
 							z = np.matmul(currVec_c, w) - senseVec
-							disSim = np.dot(z, z)
+							disSim = norm(z, z)
 							disSims.append((disSim, sen2idx[0]))
 						
-					disSims.sort()
+					
+					disSims = sorted(disSims, key=lambda x: x[0])
 					minDissim = disSims[0]
 					predict = minDissim[1]
 					
