@@ -112,8 +112,6 @@ def get_args(
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('--diagonalize', default=diag, type=bool)
 	parser.add_argument('--device', default='cuda', type=str)
-
-
 	parser.add_argument('--wsd_fw_path', help='Path to Semcor', required=False,
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('--dataset', default='semcor', help='Name of dataset', required=False,
