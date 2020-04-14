@@ -162,7 +162,9 @@ if __name__ == '__main__':
 	logging.info("Done. Loaded %d words from GloVe embeddings" % len(glove_embeddings))
 	
 
+	logging.info("Loading Training Data........")
 	train_instances = load_training_set(train_path, keys_path)
+	logging.info("Done. Loaded %d instances from dataset" % len(train_instances))
 	
 	# Build sense2idx dictionary
 	for sent_instance in train_instances:
