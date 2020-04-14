@@ -1,20 +1,89 @@
 import numpy as np 
-from random import shuffle
-from torch.autograd import Variable
+# from random import shuffle
+# from torch.autograd import Variable
 import torch.optim as optim
 import torch
+# from collections import defaultdict
 import logging
 import argparse
+
+import lxml.etree
+import xml.etree.ElementTree as ET
+
+from bert_as_service import tokenizer as bert_tokenizer
+from bert_as_service import bert_embed
+
+torch.cuda.set_device(1)
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
 					datefmt='%d-%b-%y %H:%M:%S')
 
+def load_training_set(train_path, keys_path):	
+	"""Parse XML of split set and return list of instances (dict)."""
+	train_instances = []
+	sense_mapping = get_sense_mapping(keys_path)
+	tree = ET.parse(train_path)
+	for text in tree.getroot():
+		for sent_idx, sentence in enumerate(text):
+			inst = {'tokens': [], 'tokens_mw': [], 'lemmas': [], 'senses': [], 'pos': [], 'id': []}
+			for e in sentence:
+				inst['tokens_mw'].append(e.text)
+				inst['lemmas'].append(e.get('lemma'))
+				inst['id'].append(e.get('id'))
+				inst['pos'].append(e.get('pos'))
+				if 'id' in e.attrib.keys():
+					inst['senses'].append(sense_mapping[e.get('id')])
+				else:
+					inst['senses'].append(None)
 
-def shuffler(a, b):
-	assert len(a) == len(b)
-	p = np.random.permutation(len(a))
-	return a[p], b[p]
+			inst['tokens'] = sum([t.split() for t in inst['tokens_mw']], [])
+
+			# handling multi-word expressions, mapping allows matching tokens with mw features
+			idx_map_abs = []
+			idx_map_rel = [(i, list(range(len(t.split()))))
+							for i, t in enumerate(inst['tokens_mw'])]
+			token_counter = 0
+			for idx_group, idx_tokens in idx_map_rel:  # converting relative token positions to absolute
+				idx_tokens = [i+token_counter for i in idx_tokens]
+				token_counter += len(idx_tokens)
+				idx_map_abs.append([idx_group, idx_tokens])
+			inst['tokenized_sentence'] = ' '.join(inst['tokens'])
+			inst['idx_map_abs'] = idx_map_abs
+			inst['idx'] = sent_idx
+			train_instances.append(inst)
+
+	return train_instances
+
+def chunks(l, n):
+	"""Yield successive n-sized chunks from given list."""
+	for i in range(0, len(l), n):
+		yield l[i:min(i + n, len(l))]
+
+
+def get_sense_mapping(keys_path):
+	sensekey_mapping = {}
+	sense2id = {}
+	with open(keys_path) as keys_f:
+		for line in keys_f:
+			id_ = line.split()[0]
+			keys = line.split()[1:]
+			sensekey_mapping[id_] = keys
+
+	return sensekey_mapping
+
+
+def read_xml_sents(xml_path):
+	with open(xml_path) as f:
+		for line in f:
+			line = line.strip()
+			if line.startswith('<sentence '):
+				sent_elems = [line]
+			elif line.startswith('<wf ') or line.startswith('<instance '):
+				sent_elems.append(line)
+			elif line.startswith('</sentence>'):
+				sent_elems.append(line)
+				yield lxml.etree.fromstring(''.join(sent_elems))
 
 
 def write_to_file(path, mat):
@@ -30,221 +99,172 @@ def save_pickle_dict(path, mat):
 
 
 def get_args(
-		num_epochs = 200,
+		num_epochs = 30,
 		emb_dim = 300,
 		diag = False
 			 ):
 
 	parser = argparse.ArgumentParser(description='BERT Word Sense Embeddings')
 	parser.add_argument('--embedding_path', default='data/vectors/glove_embeddings.semcor_{}.txt'.format(emb_dim), type=str)
+	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	parser.add_argument('--sense_embedding_path', default='data/vectors/bert_embeddings.semcor_1024.txt', type=str)
 	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}.txt'.format(emb_dim, emb_dim))
 	parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}.txt'.format(emb_dim))
 	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseEmbed.semcor_{}.npz'.format(emb_dim))
-	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}.npy'.format(emb_dim))
+	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
 	parser.add_argument('--num_epochs', default=num_epochs, type=int)
 	parser.add_argument('--bsize', default=32, type=int)
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('--diagonalize', default=diag, type=bool)
 	parser.add_argument('--device', default='cuda', type=str)
-	args = parser.parse_args()
 
-	if torch.cuda.is_available() is False and args.device == 'cuda':
-		print("Switching to CPU because Jodie doesn't have a GPU !!")
-		args.device = 'cpu'
+
+	parser.add_argument('--wsd_fw_path', help='Path to Semcor', required=False,
+						default='external/wsd_eval/WSD_Evaluation_Framework/')
+	parser.add_argument('--dataset', default='semcor', help='Name of dataset', required=False,
+						choices=['semcor', 'semcor_omsti'])
+	parser.add_argument('--glove_path', help='Path to GloVe', required=False,
+						default='external/glove/glove.840B.300d.txt')
+	parser.add_argument('--batch_size', type=int, default=32, help='Batch size (BERT)', required=False)
+	parser.add_argument('--max_seq_len', type=int, default=512, help='Maximum sequence length (BERT)', required=False)
+	parser.add_argument('--merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False,
+						choices=['mean', 'first', 'sum'])
+	parser.add_argument('--max_instances', type=float, default=float('inf'), help='Maximum number of examples for each sense', required=False)
+	parser.add_argument('--out_path', help='Path to resulting vector set', required=False)
+	args = parser.parse_args()
 
 	return args
 
 
 # Get embeddings from files
 def load_glove_embeddings(fn):
-	embed_g = []
-	senses = []
+	embeddings = {}
 	with open(fn, 'r') as gfile:
 		for line in gfile:
 			splitLine = line.split(' ')
-			sense = splitLine[0]
-			vec_g = np.array(splitLine[1:], dtype='float32')
-			senses.append(sense)
-			embed_g.append(vec_g)
-	return embed_g, senses
-
-	'''
-	symbols = [",", "+", "'", ':', '%']
-
-	with open(fn, 'r') as gfile:
-		for line in gfile:
-
-			splitLine = line.split(' ')
-			sense_word = ''
-			end_idx = 0
-
-			for chars in splitLine:
-				if any(c.isalpha() for c in chars) or chars in symbols or len(chars) < 4:
-					if end_idx > 0:
-						sense_word += " " + chars
-					else:
-						sense_word += chars
-					end_idx += 1
-				else:
-					break
-
-			try:
-				assert len(splitLine[end_idx:]) ==  300
-				sense_vec = [float(i) for i in splitLine[end_idx:]]
-			except:
-				sense_word = splitLine[0].split('%')[0]
-				sense_vec = [float(i) for i in splitLine[1:]]
-
-			senses.append(sense_word)
-			embed_g.append(sense_vec)
-	return embed_g, senses
-	'''
-
-
-def load_bert_embeddings(fn):
-	embed_c = []
-	with open(fn, 'r') as cfile:
-		for line in cfile:
-			splitLine = line.split(' ')
-			vec_c = np.array(splitLine[1:], dtype='float32')
-			embed_c.append(vec_c)
-	return embed_c
-	
-	'''
-	symbols = [",", "+", "'", ':', '%']
-
-	with open(fn, 'r') as cfile:
-		for line in cfile:
-			splitLine = line.split(' ')
-			sense_word = ''
-			end_idx = 0
-			for chars in splitLine:
-				if any(c.isalpha() for c in chars) or chars in symbols or len(chars) < 4:
-					if end_idx > 0:
-						sense_word += " " + chars
-					else:
-						sense_word += chars
-					end_idx += 1
-				else:
-					break
-
-			bert_vec = [float(i) for i in  splitLine[end_idx:]]
-			embed_c.append(bert_vec)
-	return embed_c
-	'''
-
-
-def lossFunctions(z):
-	loss = torch.dot(z, z)
-	return loss
-
-
-def forward(input1, input2, w, matrix_A_temp):
-	z = torch.matmul(input1, w) - torch.matmul(input2, matrix_A_temp)
-	z = z.view(-1)
-	return z
-
+			word = splitLine[0]
+			vec = np.array(splitLine[1:], dtype='float32')
+			embeddings[word] = vec
+	return embeddings
 
 if __name__ == '__main__':
 
 	args = get_args()
+
+	if torch.cuda.is_available() is False and args.device == 'cuda':
+		print("Switching to CPU because Jodie doesn't have a GPU !!")
+		args.device = 'cpu'
+
+	if args.dataset == 'semcor':
+		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor/small.data.128.xml'
+		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor/small.gold.key.128.txt'
+	elif args.dataset == 'semcor_omsti':
+		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.data.xml'
+		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.gold.key.txt'
+
 	device = torch.device(args.device)
 
-	mat_A = {}
-	senEmbeds = {}
+	sense2idx, sense2matrix, sense_matrix = {}, {}, {}
+	idx, index, out_of_vocab_num = 0, 0, 0
 
 	lr = 1e-4
-
-	logging.info("Loading Glove Embeddings........")
-	senses = load_glove_embeddings(args.embedding_path)[1]
-	embed_g = load_glove_embeddings(args.embedding_path)[0]
 	
-	logging.info("Done. Loaded %d words from GloVe embeddings" % len(embed_g))
-	logging.info("Loading BERT Embeddings........")
-	embed_c = load_bert_embeddings(args.sense_embedding_path)
-	logging.info("Done. Loaded %d words from BERT embeddings" % len(embed_c))
+	logging.info("Loading Glove Embeddings........")
+	glove_embeddings = load_glove_embeddings(args.glove_embedding_path)
+	logging.info("Done. Loaded %d words from GloVe embeddings" % len(glove_embeddings))
+	
 
-	embed_g = np.array(embed_g, dtype='float32')
-	embed_c = np.array(embed_c, dtype='float32')
-	embed_g_shuf, embed_c_shuf = shuffler(embed_g, embed_c)
-	print("Shape of embed_g: ", embed_g.shape)
-	print("Shape of embed_c: ", embed_c.shape)
+	train_instances = load_training_set(train_path, keys_path)
+	
+	# Build sense2idx dictionary
+	for sent_instance in train_instances:
+		for i in range(len(sent_instance['senses'])):
+			if sent_instance['senses'][i] is None:
+				continue
 
-	matrix_A = np.zeros((len(senses), args.emb_dim, args.emb_dim), dtype='float32')
-	embeds = np.zeros((len(senses), args.emb_dim), dtype='float32')
+			# filter out of vocabulary words 
+			for sense in sent_instance['senses'][i]:
+				if sense in sense2idx:
+					continue
 
+				word = sense.split('%')[0]
+				if word not in glove_embeddings.keys():
+					out_of_vocab_num += 1
+					continue
 
-	g_train = torch.from_numpy(embed_g_shuf)
-	c_train = torch.from_numpy(embed_c_shuf)
+				sense2idx[sense] = idx
+				idx += 1
 
-	w = torch.randn(1024, args.emb_dim, requires_grad=True,  device='cuda')
-	matrix_A_temp = torch.randn(args.emb_dim, args.emb_dim, requires_grad=True, device='cuda')
-	optimizer = optim.Adam((matrix_A_temp, w), lr)
-
-	num_senses = len(senses)
-	num_batches = num_senses // args.bsize
+	num_senses = len(sense2idx)
+	print('num_senses', num_senses)
+	
+	A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device='cuda')
+	W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32,device='cuda')
+	optimizer = optim.Adam((A, W), lr)
+	
 
 	logging.info("------------------Training-------------------")
+
 	for epoch in range(args.num_epochs):
-		loss_sum = 0
-		for batch_num, i in enumerate(range(args.bsize, num_senses, args.bsize)):
+		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
+		
+			loss = 0
+			batch_sents = [sent_info['tokenized_sentence'] for sent_info in batch]
 
-			if batch_num == num_batches: 
-				i = num_senses
+			# process contextual embeddings in sentences batches of size args.batch_size
+			batch_bert = bert_embed(batch_sents, merge_strategy=args.merge_strategy)
 
+			for sent_info, sent_bert in zip(batch, batch_bert):
+				idx_map_abs = sent_info['idx_map_abs']
 
-			contEmbed = c_train[i-args.bsize:i].view(-1, 1024).to(device)
-			g_train_vec = g_train[i-args.bsize:i].to(device)
-			wordEmbed = g_train_vec.view(-1, args.emb_dim)
+				for mw_idx, tok_idxs in idx_map_abs:
+					if sent_info['senses'][mw_idx] is None:
+						continue
 
-			z = forward(contEmbed, wordEmbed, w, matrix_A_temp)
+					for sense in sent_info['senses'][mw_idx]:
+						if sense not in sense2idx:
+							continue
+
+						index = sense2idx[sense]
+						word = sense.split('%')[0]
+
+						vec_g = glove_embeddings[word]
+						
+						# For the case of taking multiple words as a instance
+						# for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
+						# we use mean to compute the averaged vec for a multiple words expression
+						vec_c = np.array([sent_bert[i][1] for i in tok_idxs], dtype=np.float32).mean(axis=0)
+
+						vec_g = torch.from_numpy(vec_g).view(300, 1).to(device)
+						vec_c = torch.from_numpy(vec_c).view(1024, 1).to(device)
+						
+						loss += (torch.mm(W, vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
+						
 			optimizer.zero_grad()
-			loss = lossFunctions(z)
-			loss_sum += loss.item()
 			loss.backward()
 			optimizer.step()
 
-			embed = torch.matmul(wordEmbed, matrix_A_temp)
-			embeds[i-args.bsize:i] = embed.cpu().detach().numpy()
-			matrix_A[i-args.bsize:i] = matrix_A_temp.cpu().detach().numpy()
+		logging.info("epoch: %d, loss: %f " %(epoch, loss.item()))
 
-		average_loss = 	loss_sum / num_batches
-		print("epoch: %d, loss: %f " %(epoch, loss_sum))
+	weight = W.cpu().detach().numpy()
+	matrix_A = A.cpu().detach().numpy()
 
-	embeds = np.array(embeds, dtype='float32')
-	matrix_A = np.array(matrix_A, dtype='float32')
-	print('matrix_a shape', matrix_A.shape)
-	weight = w.cpu().detach().numpy()
-
-
-	
-	print('shape of sense embedding', embeds.shape)
+	logging.info('number of out of vocab word: %d' %(out_of_vocab_num))
 	print('shape of each matrix A', matrix_A[0].shape)
-	print('shape of weight matrix w', weight.shape)		
+	print('shape of weight matrix w', weight.shape)	
 
-	# Build the structure of sense embeddings and A-matrix
-	for n in range(len(senses)):
-		mat_A[senses[n]] = matrix_A[n]
-		senEmbeds[senses[n]] = embeds[n]
+	# Build the structures of W and A matrices
+	for n in range(len(sense2idx)):
+		sense_matrix[list(sense2idx.keys())[n]] = matrix_A[n]
 
-	logging.info("Total number of senses %d " %(len(senEmbeds)))
+	logging.info("Total number of senses %d " %(len(sense_matrix)))
 
-	write_to_file(args.sense_matrix_path, mat_A)
-	write_to_file(args.save_sense_emb_path, senEmbeds)
-	
+	write_to_file(args.sense_matrix_path, sense_matrix)
 
-	# np.save(args.save_sense_matrix_path.replace('txt', 'npz'), matrix_A)
-	np.savez(args.save_sense_matrix_path, matrix_A)
+	np.savez(args.save_sense_matrix_path, sense_matrix)
 	logging.info('Written %s' % args.save_sense_matrix_path)
 
-	# Save the model parameter in a npy file
-	np.save(args.save_weight_path, weight) # or txt file np.savetxt(w_path, weight)
+	np.savez(args.save_weight_path, weight)
 	logging.info('Written %s' % args.save_weight_path)
-	# print(np.load(w1_path).shape)
-
-
-
-
 
