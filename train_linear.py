@@ -101,16 +101,16 @@ def get_args(
 		diag = False
 			 ):
 
-	parser = argparse.ArgumentParser(description='BERT Word Sense Embeddings')
-	parser.add_argument('--embedding_path', default='data/vectors/glove_embeddings.semcor_{}.txt'.format(emb_dim), type=str)
+	parser = argparse.ArgumentParser(description='Train A and W matrices')
+	# parser.add_argument('--embedding_path', default='data/vectors/glove_embeddings.semcor_{}.txt'.format(emb_dim), type=str)
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('--sense_embedding_path', default='data/vectors/bert_embeddings.semcor_1024.txt', type=str)
+	# parser.add_argument('--sense_embedding_path', default='data/vectors/bert_embeddings.semcor_1024.txt', type=str)
 	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}.txt'.format(emb_dim, emb_dim))
 	parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}.txt'.format(emb_dim))
 	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseEmbed.semcor_{}.npz'.format(emb_dim))
 	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
 	parser.add_argument('--num_epochs', default=num_epochs, type=int)
-	parser.add_argument('--bsize', default=32, type=int)
+	# parser.add_argument('--bsize', default=32, type=int)
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('--diagonalize', default=diag, type=bool)
@@ -121,14 +121,12 @@ def get_args(
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('--dataset', default='semcor', help='Name of dataset', required=False,
 						choices=['semcor', 'semcor_omsti'])
-	parser.add_argument('--glove_path', help='Path to GloVe', required=False,
-						default='external/glove/glove.840B.300d.txt')
 	parser.add_argument('--batch_size', type=int, default=32, help='Batch size (BERT)', required=False)
-	parser.add_argument('--max_seq_len', type=int, default=512, help='Maximum sequence length (BERT)', required=False)
+	# parser.add_argument('--max_seq_len', type=int, default=512, help='Maximum sequence length (BERT)', required=False)
 	parser.add_argument('--merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False,
 						choices=['mean', 'first', 'sum'])
-	parser.add_argument('--max_instances', type=float, default=float('inf'), help='Maximum number of examples for each sense', required=False)
-	parser.add_argument('--out_path', help='Path to resulting vector set', required=False)
+	# parser.add_argument('--max_instances', type=float, default=float('inf'), help='Maximum number of examples for each sense', required=False)
+	# parser.add_argument('--out_path', help='Path to resulting vector set', required=False)
 	args = parser.parse_args()
 
 	return args
