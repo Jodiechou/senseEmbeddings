@@ -1,9 +1,6 @@
 import numpy as np 
-# from random import shuffle
-# from torch.autograd import Variable
 import torch.optim as optim
 import torch
-# from collections import defaultdict
 import logging
 import argparse
 
