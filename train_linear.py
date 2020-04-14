@@ -154,8 +154,8 @@ if __name__ == '__main__':
 		args.device = 'cpu'
 
 	if args.dataset == 'semcor':
-		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor/small.data.128.xml'
-		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor/small.gold.key.128.txt'
+		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor/semcor.data.xml'
+		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor/semcor.gold.key.txt'
 	elif args.dataset == 'semcor_omsti':
 		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.data.xml'
 		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.gold.key.txt'
