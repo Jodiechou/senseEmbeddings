@@ -1,16 +1,20 @@
 import numpy as np 
 import torch.optim as optim
 import torch
+from torch.autograd import Variable
+
 import logging
 import argparse
 
 import lxml.etree
 import xml.etree.ElementTree as ET
+import os
+from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
-from bert_as_service import tokenizer as bert_tokenizer
-from bert_as_service import bert_embed
 
-torch.cuda.set_device(1)
+
+# torch.cuda.set_device(1)
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
@@ -96,12 +100,12 @@ def save_pickle_dict(path, mat):
 
 
 def get_args(
-		num_epochs = 30,
+		num_epochs = 5,
 		emb_dim = 300,
 		diag = False
 			 ):
 
-	parser = argparse.ArgumentParser(description='Train A and W matrices')
+	parser = argparse.ArgumentParser(description='BERT Word Sense Embeddings')
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}.txt'.format(emb_dim, emb_dim))
 	parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}.txt'.format(emb_dim))
@@ -111,7 +115,7 @@ def get_args(
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('--diagonalize', default=diag, type=bool)
-	parser.add_argument('--device', default='cuda', type=str)
+	parser.add_argument('--device', default='cpu', type=str)
 	parser.add_argument('--wsd_fw_path', help='Path to Semcor', required=False,
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('--dataset', default='semcor', help='Name of dataset', required=False,
@@ -119,6 +123,7 @@ def get_args(
 	parser.add_argument('--batch_size', type=int, default=32, help='Batch size (BERT)', required=False)
 	parser.add_argument('--merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False,
 						choices=['mean', 'first', 'sum'])
+
 	args = parser.parse_args()
 
 	return args
@@ -134,6 +139,31 @@ def load_glove_embeddings(fn):
 			vec = np.array(splitLine[1:], dtype='float32')
 			embeddings[word] = vec
 	return embeddings
+
+
+def get_bert_embedding(sent):
+	tokenized_text = tokenizer.tokenize("[CLS] {0} [SEP]".format(sent))
+	indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+	segments_ids = [0 for i in range(len(indexed_tokens))]
+	tokens_tensor = torch.tensor([indexed_tokens])
+	segments_tensors = torch.tensor([segments_ids])
+	tokens_tensor = tokens_tensor.to(cuda0)
+	segments_tensors = segments_tensors.to(cuda0)
+	model.to(cuda0)
+	with torch.no_grad():
+		outputs = model(tokens_tensor, token_type_ids=segments_tensors)
+	res = list(zip(tokenized_text[1:-1], outputs[0].cpu().detach().numpy()[0][1:-1])) ## [1:-1] is used to get rid of CLS] and [SEP]
+	
+	## merge subtokens
+	sent_tokens_vecs = []
+	for token in sent.split():
+		token_vecs = []
+		for subtoken in tokenizer.tokenize(token):
+			encoded_token, encoded_vec = res.pop(0)
+			token_vecs.append(encoded_vec)
+			merged_vec = np.array(token_vecs).mean(axis=0)
+			sent_tokens_vecs.append((token, merged_vec))
+	return sent_tokens_vecs
 
 if __name__ == '__main__':
 
@@ -151,22 +181,30 @@ if __name__ == '__main__':
 		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.gold.key.txt'
 
 	device = torch.device(args.device)
+	cuda0 = torch.device("cuda:0")
+	cuda1 = torch.device("cuda:1")
 
 	sense2idx, sense2matrix, sense_matrix = {}, {}, {}
 	idx, index, out_of_vocab_num = 0, 0, 0
 
-	lr = 1e-4
+	lr = 1e-3
+
+	count_loss = 0
+
+	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
+	model = BertModel.from_pretrained('bert-large-cased')
+	model.eval()
 	
 	logging.info("Loading Glove Embeddings........")
 	glove_embeddings = load_glove_embeddings(args.glove_embedding_path)
 	logging.info("Done. Loaded %d words from GloVe embeddings" % len(glove_embeddings))
 	
-
 	logging.info("Loading Training Data........")
 	train_instances = load_training_set(train_path, keys_path)
 	logging.info("Done. Loaded %d instances from dataset" % len(train_instances))
 	
-	# Build sense2idx dictionary
+	## Build sense2idx dictionary
+	## Use dictionary to filter sense with the same id
 	for sent_instance in train_instances:
 		for i in range(len(sent_instance['senses'])):
 			if sent_instance['senses'][i] is None:
@@ -186,10 +224,10 @@ if __name__ == '__main__':
 				idx += 1
 
 	num_senses = len(sense2idx)
-	print('num_senses', num_senses)
+	# print('num_senses', num_senses)
 	
-	A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device='cuda')
-	W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32,device='cuda')
+	A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1)
+	W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32, device=cuda1)
 	optimizer = optim.Adam((A, W), lr)
 	
 
@@ -199,10 +237,16 @@ if __name__ == '__main__':
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
 		
 			loss = 0
+			batch_bert = []
 			batch_sents = [sent_info['tokenized_sentence'] for sent_info in batch]
 
 			# process contextual embeddings in sentences batches of size args.batch_size
-			batch_bert = bert_embed(batch_sents, merge_strategy=args.merge_strategy)
+			# batch_bert = bert_embed(batch_sents, merge_strategy=args.merge_strategy)
+
+			for s in batch_sents:
+				batch_vec = get_bert_embedding(s)
+				batch_bert.append(batch_vec)
+			# print('batch_bert', batch_bert)
 
 			for sent_info, sent_bert in zip(batch, batch_bert):
 				idx_map_abs = sent_info['idx_map_abs']
@@ -224,12 +268,17 @@ if __name__ == '__main__':
 						# for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
 						# we use mean to compute the averaged vec for a multiple words expression
 						vec_c = np.array([sent_bert[i][1] for i in tok_idxs], dtype=np.float32).mean(axis=0)
+						# print('vec_c', vec_c)
 
-						vec_g = torch.from_numpy(vec_g).view(300, 1).to(device)
-						vec_c = torch.from_numpy(vec_c).view(1024, 1).to(device)
+						vec_g = torch.from_numpy(vec_g).view(300, 1).to(cuda1)
+						vec_c = torch.from_numpy(vec_c).view(1024, 1).to(cuda1)	
 						
 						loss += (torch.mm(W, vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
-						
+
+						# count_loss += 1
+						# print('count_loss', count_loss)
+			
+		
 			optimizer.zero_grad()
 			loss.backward()
 			optimizer.step()
@@ -238,6 +287,8 @@ if __name__ == '__main__':
 
 	weight = W.cpu().detach().numpy()
 	matrix_A = A.cpu().detach().numpy()
+
+
 
 	logging.info('number of out of vocab word: %d' %(out_of_vocab_num))
 	print('shape of each matrix A', matrix_A[0].shape)
