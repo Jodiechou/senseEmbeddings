@@ -8,7 +8,10 @@ import argparse
 
 import lxml.etree
 import xml.etree.ElementTree as ET
+
 import os
+
+import torch
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 
@@ -158,11 +161,16 @@ def get_bert_embedding(sent):
 	sent_tokens_vecs = []
 	for token in sent.split():
 		token_vecs = []
+		sub = []
 		for subtoken in tokenizer.tokenize(token):
 			encoded_token, encoded_vec = res.pop(0)
+			sub.append(encoded_token)
 			token_vecs.append(encoded_vec)
-			merged_vec = np.array(token_vecs).mean(axis=0)
-			sent_tokens_vecs.append((token, merged_vec))
+			merged_vec = np.array(token_vecs).mean(axis=0) ###
+			merged_vec = torch.from_numpy(merged_vec.reshape(1, 1024)).to(cuda1)
+
+		sent_tokens_vecs.append((token, merged_vec))
+		# del merged_vec
 	return sent_tokens_vecs
 
 if __name__ == '__main__':
@@ -195,16 +203,16 @@ if __name__ == '__main__':
 	model = BertModel.from_pretrained('bert-large-cased')
 	model.eval()
 	
-	logging.info("Loading Glove Embeddings........")
-	glove_embeddings = load_glove_embeddings(args.glove_embedding_path)
-	logging.info("Done. Loaded %d words from GloVe embeddings" % len(glove_embeddings))
-	
 	logging.info("Loading Training Data........")
 	train_instances = load_training_set(train_path, keys_path)
 	logging.info("Done. Loaded %d instances from dataset" % len(train_instances))
 	
 	## Build sense2idx dictionary
 	## Use dictionary to filter sense with the same id
+	logging.info("Loading Glove Embeddings........")
+	glove_embeddings_full = load_glove_embeddings(args.glove_embedding_path)
+
+	glove_embeddings = {}
 	for sent_instance in train_instances:
 		for i in range(len(sent_instance['senses'])):
 			if sent_instance['senses'][i] is None:
@@ -216,18 +224,27 @@ if __name__ == '__main__':
 					continue
 
 				word = sense.split('%')[0]
-				if word not in glove_embeddings.keys():
+				if word not in glove_embeddings_full.keys():
 					out_of_vocab_num += 1
 					continue
+
+				glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(1, 300)).to(cuda1)
 
 				sense2idx[sense] = idx
 				idx += 1
 
+	logging.info("Done. Loaded %d words from GloVe embeddings" % len(glove_embeddings))
+	
 	num_senses = len(sense2idx)
-	# print('num_senses', num_senses)
+
+
 	
 	A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1)
-	W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32, device=cuda1)
+	# A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32)
+	# A = torch.randn(num_senses, args.emb_dim, dtype=torch.float32, device=cuda1)
+	# A = Variable(torch.diag_embed(A), requires_grad=True)
+	# W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32)
+	W = torch.randn(1024, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1)
 	optimizer = optim.Adam((A, W), lr)
 	
 
@@ -238,18 +255,17 @@ if __name__ == '__main__':
 		
 			loss = 0
 			batch_bert = []
-			batch_sents = [sent_info['tokenized_sentence'] for sent_info in batch]
 
 			# process contextual embeddings in sentences batches of size args.batch_size
 			# batch_bert = bert_embed(batch_sents, merge_strategy=args.merge_strategy)
+			print('Im here 1')
 
-			for s in batch_sents:
-				batch_vec = get_bert_embedding(s)
-				batch_bert.append(batch_vec)
-			# print('batch_bert', batch_bert)
-
-			for sent_info, sent_bert in zip(batch, batch_bert):
+			for sent_info in batch:
 				idx_map_abs = sent_info['idx_map_abs']
+
+				sent_bert = get_bert_embedding(sent_info['tokenized_sentence'])
+
+				print('Im here 2')
 
 				for mw_idx, tok_idxs in idx_map_abs:
 					if sent_info['senses'][mw_idx] is None:
@@ -261,27 +277,35 @@ if __name__ == '__main__':
 
 						index = sense2idx[sense]
 						word = sense.split('%')[0]
+						print('Im here 3')
 
 						vec_g = glove_embeddings[word]
-						
+						print('Im here 4')
+
 						# For the case of taking multiple words as a instance
 						# for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
 						# we use mean to compute the averaged vec for a multiple words expression
-						vec_c = np.array([sent_bert[i][1] for i in tok_idxs], dtype=np.float32).mean(axis=0)
-						# print('vec_c', vec_c)
+						# vec_c = np.array([sent_bert[i][1] for i in tok_idxs], dtype=np.float32).mean(axis=0)
 
-						vec_g = torch.from_numpy(vec_g).view(300, 1).to(cuda1)
-						vec_c = torch.from_numpy(vec_c).view(1024, 1).to(cuda1)	
-						
-						loss += (torch.mm(W, vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
+						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)		
+						print('Im here 5')				
+					
+						loss += (torch.mm(vec_c, W) - torch.mm(vec_g, A[index])).norm() ** 2
+						print('loss', loss.item())
+						print('Im here 6')
 
-						# count_loss += 1
-						# print('count_loss', count_loss)
+						del vec_c, vec_g
+						print('Im here 7')
 			
+
 		
 			optimizer.zero_grad()
-			loss.backward()
+			print('Im here 8') ### the code is able to print out numer 8 
+			loss.backward() 
+			print('Im here 9')
 			optimizer.step()
+			print('Im here 10')
+
 
 		logging.info("epoch: %d, loss: %f " %(epoch, loss.item()))
 
