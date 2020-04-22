@@ -9,6 +9,8 @@ import argparse
 import lxml.etree
 import xml.etree.ElementTree as ET
 
+# from bert_as_service import tokenizer as bert_tokenizer
+# from bert_as_service import bert_embed
 import os
 
 import torch
@@ -167,7 +169,7 @@ def get_bert_embedding(sent):
 			sub.append(encoded_token)
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs).mean(axis=0) ###
-			merged_vec = torch.from_numpy(merged_vec.reshape(1, 1024)).to(cuda1)
+			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(cuda1)
 
 		sent_tokens_vecs.append((token, merged_vec))
 		# del merged_vec
@@ -182,8 +184,8 @@ if __name__ == '__main__':
 		args.device = 'cpu'
 
 	if args.dataset == 'semcor':
-		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor/semcor.data.xml'
-		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor/semcor.gold.key.txt'
+		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor/small.data.128.xml'
+		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor/small.gold.key.128.txt'
 	elif args.dataset == 'semcor_omsti':
 		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.data.xml'
 		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.gold.key.txt'
@@ -228,7 +230,7 @@ if __name__ == '__main__':
 					out_of_vocab_num += 1
 					continue
 
-				glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(1, 300)).to(cuda1)
+				glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(300, 1)).to(cuda1)
 
 				sense2idx[sense] = idx
 				idx += 1
@@ -244,7 +246,7 @@ if __name__ == '__main__':
 	# A = torch.randn(num_senses, args.emb_dim, dtype=torch.float32, device=cuda1)
 	# A = Variable(torch.diag_embed(A), requires_grad=True)
 	# W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32)
-	W = torch.randn(1024, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1)
+	W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32, device=cuda1)
 	optimizer = optim.Adam((A, W), lr)
 	
 
@@ -255,17 +257,18 @@ if __name__ == '__main__':
 		
 			loss = 0
 			batch_bert = []
+			## batch_sents = [sent_info['tokenized_sentence'] for sent_info in batch]
 
 			# process contextual embeddings in sentences batches of size args.batch_size
 			# batch_bert = bert_embed(batch_sents, merge_strategy=args.merge_strategy)
-			print('Im here 1')
+			# print('Im here 1')
 
 			for sent_info in batch:
 				idx_map_abs = sent_info['idx_map_abs']
 
 				sent_bert = get_bert_embedding(sent_info['tokenized_sentence'])
 
-				print('Im here 2')
+				# print('Im here 2')
 
 				for mw_idx, tok_idxs in idx_map_abs:
 					if sent_info['senses'][mw_idx] is None:
@@ -277,10 +280,10 @@ if __name__ == '__main__':
 
 						index = sense2idx[sense]
 						word = sense.split('%')[0]
-						print('Im here 3')
+						# print('Im here 3')
 
 						vec_g = glove_embeddings[word]
-						print('Im here 4')
+						# print('Im here 4')
 
 						# For the case of taking multiple words as a instance
 						# for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
@@ -288,23 +291,23 @@ if __name__ == '__main__':
 						# vec_c = np.array([sent_bert[i][1] for i in tok_idxs], dtype=np.float32).mean(axis=0)
 
 						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)		
-						print('Im here 5')				
+						# print('Im here 5')				
 					
-						loss += (torch.mm(vec_c, W) - torch.mm(vec_g, A[index])).norm() ** 2
-						print('loss', loss.item())
-						print('Im here 6')
+						loss += (torch.mm(W, vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
+						# print('loss', loss.item())
+						# print('Im here 6')
 
 						del vec_c, vec_g
-						print('Im here 7')
+						# print('Im here 7')
 			
 
 		
 			optimizer.zero_grad()
-			print('Im here 8') ### the code is able to print out numer 8 
+			# print('Im here 8') ### the code is able to print out numer 8 
 			loss.backward() 
-			print('Im here 9')
+			# print('Im here 9')
 			optimizer.step()
-			print('Im here 10')
+			# print('Im here 10')
 
 
 		logging.info("epoch: %d, loss: %f " %(epoch, loss.item()))
