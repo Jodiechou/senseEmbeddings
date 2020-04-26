@@ -19,7 +19,7 @@ from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 
 # torch.cuda.set_device(1)
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
@@ -168,7 +168,7 @@ def get_bert_embedding(sent):
 			encoded_token, encoded_vec = res.pop(0)
 			sub.append(encoded_token)
 			token_vecs.append(encoded_vec)
-			merged_vec = np.array(token_vecs).mean(axis=0) ###
+			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) ###
 			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(cuda1)
 
 		sent_tokens_vecs.append((token, merged_vec))
@@ -199,7 +199,6 @@ if __name__ == '__main__':
 
 	lr = 1e-3
 
-	count_loss = 0
 
 	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
 	model = BertModel.from_pretrained('bert-large-cased')
@@ -253,9 +252,13 @@ if __name__ == '__main__':
 	logging.info("------------------Training-------------------")
 
 	for epoch in range(args.num_epochs):
+		cum_loss = 0  
+		count = 0 
+
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
-		
-			loss = 0
+			optimizer.zero_grad()
+			loss = Variable(torch.zeros(1, dtype=torch.float32)).to(cuda1)
+			count += 1
 			batch_bert = []
 			## batch_sents = [sent_info['tokenized_sentence'] for sent_info in batch]
 
@@ -302,15 +305,16 @@ if __name__ == '__main__':
 			
 
 		
-			optimizer.zero_grad()
+			
 			# print('Im here 8') ### the code is able to print out numer 8 
-			loss.backward() 
+			cum_loss += loss.item()
+			loss.backward(retain_graph=True)
 			# print('Im here 9')
 			optimizer.step()
 			# print('Im here 10')
 
-
-		logging.info("epoch: %d, loss: %f " %(epoch, loss.item()))
+		cum_loss /= count
+		logging.info("epoch: %d, loss: %f " %(epoch, cum_loss))
 
 	weight = W.cpu().detach().numpy()
 	matrix_A = A.cpu().detach().numpy()
@@ -334,4 +338,3 @@ if __name__ == '__main__':
 
 	np.savez(args.save_weight_path, weight)
 	logging.info('Written %s' % args.save_weight_path)
-
