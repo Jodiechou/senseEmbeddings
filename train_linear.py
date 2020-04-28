@@ -1,7 +1,7 @@
 import numpy as np 
 import torch.optim as optim
 import torch
-from torch.autograd import Variable
+# from torch.autograd import Variable
 
 import logging
 import argparse
@@ -59,7 +59,7 @@ def load_training_set(train_path, keys_path):
 			inst['idx'] = sent_idx
 			train_instances.append(inst)
 
-	return train_instances[0:3500]
+	return train_instances
 
 def chunks(l, n):
 	"""Yield successive n-sized chunks from given list."""
@@ -105,17 +105,17 @@ def save_pickle_dict(path, mat):
 
 
 def get_args(
-		num_epochs = 100,
+		num_epochs = 20,
 		emb_dim = 300,
 		diag = False
 			 ):
 
 	parser = argparse.ArgumentParser(description='BERT Word Sense Embeddings')
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}_6196_1.txt'.format(emb_dim, emb_dim))
-	parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}_6196_1.txt'.format(emb_dim))
-	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseEmbed.semcor_{}_6196_1.npz'.format(emb_dim))
-	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}_6196_1.npz'.format(emb_dim))
+	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}.txt'.format(emb_dim, emb_dim))
+	parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}.txt'.format(emb_dim))
+	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseEmbed.semcor_{}.npz'.format(emb_dim))
+	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
 	parser.add_argument('--num_epochs', default=num_epochs, type=int)
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
@@ -198,7 +198,7 @@ if __name__ == '__main__':
 	sense2idx, sense2matrix, sense_matrix = {}, {}, {}
 	idx, index, out_of_vocab_num = 0, 0, 0
 
-	lr = 1e-3
+	lr = 1e-2
 
 
 	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
@@ -241,12 +241,23 @@ if __name__ == '__main__':
 	num_senses = len(sense2idx)
 
 
-	
-	A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1)
-	# A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32)
-	# W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32)
-	W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32, device=cuda1)
-	optimizer = optim.Adam((A, W), lr)
+	A = []
+	# A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1)
+	# A_i = torch.randn(args.emb_dim, args.emb_dim, device=cuda1, dtype=torch.float32, requires_grad=True)
+	# A_i = torch.randn(args.emb_dim, args.emb_dim, dtype=torch.float32).to(cuda1).detach().requires_grad_(True)
+	# A = [A_i for _ in range(0, num_senses)]
+	for i in range(0, num_senses):
+		A.append(torch.randn(args.emb_dim, args.emb_dim, device=cuda1, dtype=torch.float32, requires_grad=True))
+
+	# test = torch.zeros((10,10)).to(data.device).detach().requires_grad_(True)
+	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=cuda1, requires_grad=True)]
+	# W = torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=cuda1, requires_grad=True)
+	params = A+W
+
+	# params = [W]
+	# for i in range(0, num_senses):
+	#     params.append(torch.randn(args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1))
+	optimizer = optim.Adam(params, lr)
 	
 
 	logging.info("------------------Training-------------------")
@@ -257,7 +268,7 @@ if __name__ == '__main__':
 
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
 			optimizer.zero_grad()
-			loss = Variable(torch.zeros(1, dtype=torch.float32)).to(cuda1)
+			loss = torch.zeros(1, dtype=torch.float32).to(cuda1)
 			# loss = Variable(torch.zeros(1, dtype=torch.float32))
 			count += 1
 			batch_bert = []
@@ -297,7 +308,7 @@ if __name__ == '__main__':
 						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)		
 						# print('Im here 5')				
 					
-						loss += (torch.mm(W, vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
+						loss += (torch.mm(W[0], vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
 						# print('loss', loss.item())
 						# print('Im here 6')
 
@@ -317,8 +328,8 @@ if __name__ == '__main__':
 		cum_loss /= count
 		logging.info("epoch: %d, loss: %f " %(epoch, cum_loss))
 
-	weight = W.cpu().detach().numpy()
-	matrix_A = A.cpu().detach().numpy()
+	weight = W[0].cpu().detach().numpy()
+	matrix_A = [A[i].cpu().detach().numpy() for _ in range(num_senses)]
 
 
 
