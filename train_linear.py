@@ -59,7 +59,7 @@ def load_training_set(train_path, keys_path):
 			inst['idx'] = sent_idx
 			train_instances.append(inst)
 
-	return train_instances
+	return train_instances[0:3500]
 
 def chunks(l, n):
 	"""Yield successive n-sized chunks from given list."""
@@ -105,17 +105,17 @@ def save_pickle_dict(path, mat):
 
 
 def get_args(
-		num_epochs = 5,
+		num_epochs = 100,
 		emb_dim = 300,
 		diag = False
 			 ):
 
 	parser = argparse.ArgumentParser(description='BERT Word Sense Embeddings')
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}.txt'.format(emb_dim, emb_dim))
-	parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}.txt'.format(emb_dim))
-	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseEmbed.semcor_{}.npz'.format(emb_dim))
-	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
+	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}_6196_1.txt'.format(emb_dim, emb_dim))
+	parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}_6196_1.txt'.format(emb_dim))
+	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseEmbed.semcor_{}_6196_1.npz'.format(emb_dim))
+	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}_6196_1.npz'.format(emb_dim))
 	parser.add_argument('--num_epochs', default=num_epochs, type=int)
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
@@ -170,6 +170,7 @@ def get_bert_embedding(sent):
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) ###
 			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(cuda1)
+			# merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1))
 
 		sent_tokens_vecs.append((token, merged_vec))
 		# del merged_vec
@@ -184,8 +185,8 @@ if __name__ == '__main__':
 		args.device = 'cpu'
 
 	if args.dataset == 'semcor':
-		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor/small.data.128.xml'
-		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor/small.gold.key.128.txt'
+		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor/semcor.data.xml'
+		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor/semcor.gold.key.txt'
 	elif args.dataset == 'semcor_omsti':
 		train_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.data.xml'
 		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.gold.key.txt'
@@ -230,6 +231,7 @@ if __name__ == '__main__':
 					continue
 
 				glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(300, 1)).to(cuda1)
+				# glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(300, 1))
 
 				sense2idx[sense] = idx
 				idx += 1
@@ -242,8 +244,6 @@ if __name__ == '__main__':
 	
 	A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1)
 	# A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32)
-	# A = torch.randn(num_senses, args.emb_dim, dtype=torch.float32, device=cuda1)
-	# A = Variable(torch.diag_embed(A), requires_grad=True)
 	# W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32)
 	W = torch.randn(args.emb_dim, 1024, requires_grad=True, dtype=torch.float32, device=cuda1)
 	optimizer = optim.Adam((A, W), lr)
@@ -258,6 +258,7 @@ if __name__ == '__main__':
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
 			optimizer.zero_grad()
 			loss = Variable(torch.zeros(1, dtype=torch.float32)).to(cuda1)
+			# loss = Variable(torch.zeros(1, dtype=torch.float32))
 			count += 1
 			batch_bert = []
 			## batch_sents = [sent_info['tokenized_sentence'] for sent_info in batch]
