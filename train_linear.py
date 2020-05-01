@@ -120,7 +120,7 @@ def get_args(
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('--diagonalize', default=diag, type=bool)
-	parser.add_argument('--device', default='cpu', type=str)
+	parser.add_argument('--device', default='cuda', type=str)
 	parser.add_argument('--wsd_fw_path', help='Path to Semcor', required=False,
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('--dataset', default='semcor', help='Name of dataset', required=False,
@@ -152,9 +152,9 @@ def get_bert_embedding(sent):
 	segments_ids = [0 for i in range(len(indexed_tokens))]
 	tokens_tensor = torch.tensor([indexed_tokens])
 	segments_tensors = torch.tensor([segments_ids])
-	tokens_tensor = tokens_tensor.cuda()
-	segments_tensors = segments_tensors.cuda()
-	model.cuda()
+	tokens_tensor = tokens_tensor.to(device)
+	segments_tensors = segments_tensors.to(device)
+	model.to(device)
 	with torch.no_grad():
 		outputs = model(tokens_tensor, token_type_ids=segments_tensors)
 	res = list(zip(tokenized_text[1:-1], outputs[0].cpu().detach().numpy()[0][1:-1])) ## [1:-1] is used to get rid of CLS] and [SEP]
@@ -169,7 +169,7 @@ def get_bert_embedding(sent):
 			sub.append(encoded_token)
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) ###
-			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(cuda1)
+			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)
 			# merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1))
 
 		sent_tokens_vecs.append((token, merged_vec))
@@ -192,8 +192,8 @@ if __name__ == '__main__':
 		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.gold.key.txt'
 
 	device = torch.device(args.device)
-	cuda0 = torch.device("cuda:0")
-	cuda1 = torch.device("cuda:1")
+	# cuda0 = torch.device("cuda:0")
+	# cuda1 = torch.device("cuda:1")
 
 	sense2idx, sense2matrix, sense_matrix = {}, {}, {}
 	idx, index, out_of_vocab_num = 0, 0, 0
@@ -230,7 +230,7 @@ if __name__ == '__main__':
 					out_of_vocab_num += 1
 					continue
 
-				glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(300, 1)).to(cuda1)
+				glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(300, 1)).to(device)
 				# glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(300, 1))
 
 				sense2idx[sense] = idx
@@ -247,10 +247,10 @@ if __name__ == '__main__':
 	# A_i = torch.randn(args.emb_dim, args.emb_dim, dtype=torch.float32).to(cuda1).detach().requires_grad_(True)
 	# A = [A_i for _ in range(0, num_senses)]
 	for i in range(0, num_senses):
-		A.append(torch.randn(args.emb_dim, args.emb_dim, device=cuda1, dtype=torch.float32, requires_grad=True))
+		A.append(torch.randn(args.emb_dim, args.emb_dim, device='cuda', dtype=torch.float32, requires_grad=True))
 
 	# test = torch.zeros((10,10)).to(data.device).detach().requires_grad_(True)
-	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=cuda1, requires_grad=True)]
+	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device='cuda', requires_grad=True)]
 	# W = torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=cuda1, requires_grad=True)
 	params = A+W
 
@@ -268,7 +268,7 @@ if __name__ == '__main__':
 
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
 			optimizer.zero_grad()
-			loss = torch.zeros(1, dtype=torch.float32).to(cuda1)
+			loss = torch.zeros(1, dtype=torch.float32).to(device)
 			# loss = Variable(torch.zeros(1, dtype=torch.float32))
 			count += 1
 			batch_bert = []
