@@ -19,7 +19,7 @@ from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 
 # torch.cuda.set_device(1)
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
@@ -125,7 +125,7 @@ def get_args(
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('--dataset', default='semcor', help='Name of dataset', required=False,
 						choices=['semcor', 'semcor_omsti'])
-	parser.add_argument('--batch_size', type=int, default=32, help='Batch size (BERT)', required=False)
+	parser.add_argument('--batch_size', type=int, default=8, help='Batch size (BERT)', required=False)
 	parser.add_argument('--merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False,
 						choices=['mean', 'first', 'sum'])
 
@@ -152,9 +152,9 @@ def get_bert_embedding(sent):
 	segments_ids = [0 for i in range(len(indexed_tokens))]
 	tokens_tensor = torch.tensor([indexed_tokens])
 	segments_tensors = torch.tensor([segments_ids])
-	tokens_tensor = tokens_tensor.to(cuda0)
-	segments_tensors = segments_tensors.to(cuda0)
-	model.to(cuda0)
+	tokens_tensor = tokens_tensor.cuda()
+	segments_tensors = segments_tensors.cuda()
+	model.cuda()
 	with torch.no_grad():
 		outputs = model(tokens_tensor, token_type_ids=segments_tensors)
 	res = list(zip(tokenized_text[1:-1], outputs[0].cpu().detach().numpy()[0][1:-1])) ## [1:-1] is used to get rid of CLS] and [SEP]
@@ -313,6 +313,7 @@ if __name__ == '__main__':
 						# print('Im here 6')
 
 						del vec_c, vec_g
+						torch.cuda.empty_cache()
 						# print('Im here 7')
 			
 
