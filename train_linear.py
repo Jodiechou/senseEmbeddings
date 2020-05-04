@@ -170,12 +170,10 @@ def get_bert_embedding(sent):
 			encoded_token, encoded_vec = res.pop(0)
 			sub.append(encoded_token)
 			token_vecs.append(encoded_vec)
-			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) ###
+			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) 
 			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)
-			# merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1))
-
 		sent_tokens_vecs.append((token, merged_vec))
-		# del merged_vec
+
 	return sent_tokens_vecs
 
 if __name__ == '__main__':
@@ -194,8 +192,6 @@ if __name__ == '__main__':
 		keys_path = args.wsd_fw_path + 'Training_Corpora/SemCor+OMSTI/semcor+omsti.gold.key.txt'
 
 	device = torch.device(args.device)
-	# cuda0 = torch.device("cuda:0")
-	# cuda1 = torch.device("cuda:1")
 
 	sense2idx, sense_matrix = {}, {}
 	idx, index, out_of_vocab_num = 0, 0, 0
@@ -211,8 +207,8 @@ if __name__ == '__main__':
 	train_instances = load_training_set(train_path, keys_path)
 	logging.info("Done. Loaded %d instances from dataset" % len(train_instances))
 	
-	## Build sense2idx dictionary
-	## Use dictionary to filter sense with the same id
+	## build sense2idx dictionary
+	## use dictionary to filter sense with the same id
 	logging.info("Loading Glove Embeddings........")
 	glove_embeddings_full = load_glove_embeddings(args.glove_embedding_path)
 
@@ -233,38 +229,20 @@ if __name__ == '__main__':
 					continue
 
 				glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(300, 1)).to(device)
-				# glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word].reshape(300, 1))
-
 				sense2idx[sense] = idx
 				idx += 1
 
 	logging.info("Done. Loaded %d words from GloVe embeddings" % len(glove_embeddings))
-	
 	num_senses = len(sense2idx)
 
-
 	A = []
-	# A = [torch.randn(args.emb_dim, requires_grad=True, dtype=torch.float32, device='cuda')]
 
 	for i in range(0, num_senses):
-		A.append(torch.randn(args.emb_dim, args.emb_dim, device='cuda', dtype=torch.float32, requires_grad=False))
+		A.append(torch.randn(args.emb_dim, args.emb_dim, device=device, dtype=torch.float32, requires_grad=False))
 
-	# test = torch.zeros((10,10)).to(data.device).detach().requires_grad_(True)
-	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device='cuda', requires_grad=True)]
-	# W = torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=cuda1, requires_grad=True)
+	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=device, requires_grad=True)]
 	params = W+A
-
-	# params = [W]
-	# for i in range(0, num_senses):
-	#     params.append(torch.randn(args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1))
 	optimizer = optim.Adam(params, lr)
-	# print('optimizer parameters', optimizer.param_groups)
-
-	# i_list=[i for i in optimizer.param_groups[0].items()]
-
-	# optimizer.param_groups is a list of a dict
-	# optimizer.param_groups[0]['params'] returns a list of trainable parameters
-	# print('parameters', optimizer.param_groups[0]['params'][0])  
 	
 
 	logging.info("------------------Training-------------------")
@@ -286,14 +264,10 @@ if __name__ == '__main__':
 			count += 1
 
 			# process contextual embeddings in sentences batches of size args.batch_size
-			# print('Im here 1')
-
 			for sent_info in batch:
 				idx_map_abs = sent_info['idx_map_abs']
 
 				sent_bert = get_bert_embedding(sent_info['tokenized_sentence'])
-
-				# print('Im here 2')
 
 				for mw_idx, tok_idxs in idx_map_abs:
 					if sent_info['senses'][mw_idx] is None:
@@ -305,18 +279,13 @@ if __name__ == '__main__':
 
 						index = sense2idx[sense]
 						word = sense.split('%')[0]
-						# print('Im here 3')
-
 						vec_g = glove_embeddings[word]
-						# print('Im here 4')
 
-						# For the case of taking multiple words as a instance
+						# for the case of taking multiple words as a instance
 						# for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
 						# we use mean to compute the averaged vec for a multiple words expression
 
-						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)		
-						# print('Im here 5')				
-					
+						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)										
 						loss += (torch.mm(W[0], vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
 
 						# set the A matrices that are in a current batch to require gradient
@@ -326,15 +295,9 @@ if __name__ == '__main__':
 			cum_loss += float(loss.item())
 			# loss.backward(retain_graph=True)
 			loss.backward()
-			# print('Im here 9')
 			optimizer.step()
-			# del loss 
-			# torch.cuda.empty_cache()
-			# print('Im here 10')
 
-		# print('Im here 11')
 		cum_loss /= count
-		
 		logging.info("epoch: %d, loss: %f " %(epoch, cum_loss))
 
 
@@ -347,7 +310,7 @@ if __name__ == '__main__':
 	logging.info('shape of each matrix A:', matrix_A[0].shape)
 	logging.info('shape of weight matrix w:', weight.shape)	
 
-	# Build the structures of W and A matrices
+	# build the structures of W and A matrices
 	for n in range(len(sense2idx)):
 		sense_matrix[list(sense2idx.keys())[n]] = matrix_A[n]
 
