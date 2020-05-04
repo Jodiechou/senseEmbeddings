@@ -10,16 +10,12 @@ import argparse
 import lxml.etree
 import xml.etree.ElementTree as ET
 
-# from bert_as_service import tokenizer as bert_tokenizer
-# from bert_as_service import bert_embed
 import os
 
 import torch
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 
-
-# torch.cuda.set_device(1)
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 logging.basicConfig(level=logging.DEBUG,
@@ -176,6 +172,7 @@ def get_bert_embedding(sent):
 
 	return sent_tokens_vecs
 
+
 if __name__ == '__main__':
 
 	args = get_args()
@@ -197,7 +194,6 @@ if __name__ == '__main__':
 	idx, index, out_of_vocab_num = 0, 0, 0
 
 	lr = 1e-2
-
 
 	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
 	model = BertModel.from_pretrained('bert-large-cased')
@@ -238,7 +234,7 @@ if __name__ == '__main__':
 	A = []
 
 	for i in range(0, num_senses):
-		A.append(torch.randn(args.emb_dim, args.emb_dim, device=device, dtype=torch.float32, requires_grad=False))
+		A.append(torch.randn(args.emb_dim, args.emb_dim, dtype=torch.float32, device=device, requires_grad=False))
 
 	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=device, requires_grad=True)]
 	params = W+A
