@@ -299,8 +299,8 @@ if __name__ == '__main__':
 
 	# save the trained parameters W and A matrices
 	# W is the first element in optimizer.param_groups[0]['params']
-	weight = optimizer.param_groups[0]['params'][0].cpu().detach().numpy()
-	matrix_A = [optimizer.param_groups[0]['params'][i+1].cpu().detach().numpy() for _ in range(num_senses)]
+	weight = W[0].cpu().detach().numpy()
+	matrix_A = [A[i].cpu().detach().numpy() for _ in range(num_senses)]
 
 	logging.info('number of out of vocab word: %d' %(out_of_vocab_num))
 	print('shape of each matrix A:', matrix_A[0].shape)
