@@ -104,7 +104,7 @@ def save_pickle_dict(path, mat):
 def get_args(
 		num_epochs = 10,
 		emb_dim = 300,
-		batch_size = 32,
+		batch_size = 64,
 		diag = False
 			 ):
 
@@ -303,8 +303,8 @@ if __name__ == '__main__':
 	matrix_A = [optimizer.param_groups[0]['params'][i+1].cpu().detach().numpy() for _ in range(num_senses)]
 
 	logging.info('number of out of vocab word: %d' %(out_of_vocab_num))
-	logging.info('shape of each matrix A:', matrix_A[0].shape)
-	logging.info('shape of weight matrix w:', weight.shape)	
+	print('shape of each matrix A:', matrix_A[0].shape)
+	print('shape of weight matrix w:', weight.shape)	
 
 	# build the structures of W and A matrices
 	for n in range(len(sense2idx)):
