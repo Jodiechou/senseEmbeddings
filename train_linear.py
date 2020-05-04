@@ -1,7 +1,8 @@
 import numpy as np 
 import torch.optim as optim
 import torch
-# from torch.autograd import Variable
+import torch.nn as nn
+import torch.nn.functional as F
 
 import logging
 import argparse
@@ -105,8 +106,9 @@ def save_pickle_dict(path, mat):
 
 
 def get_args(
-		num_epochs = 20,
+		num_epochs = 10,
 		emb_dim = 300,
+		batch_size = 32,
 		diag = False
 			 ):
 
@@ -125,7 +127,7 @@ def get_args(
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('--dataset', default='semcor', help='Name of dataset', required=False,
 						choices=['semcor', 'semcor_omsti'])
-	parser.add_argument('--batch_size', type=int, default=8, help='Batch size (BERT)', required=False)
+	parser.add_argument('--batch_size', type=int, default=batch_size, help='Batch size (BERT)', required=False)
 	parser.add_argument('--merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False,
 						choices=['mean', 'first', 'sum'])
 
@@ -195,7 +197,7 @@ if __name__ == '__main__':
 	# cuda0 = torch.device("cuda:0")
 	# cuda1 = torch.device("cuda:1")
 
-	sense2idx, sense2matrix, sense_matrix = {}, {}, {}
+	sense2idx, sense_matrix = {}, {}
 	idx, index, out_of_vocab_num = 0, 0, 0
 
 	lr = 1e-2
@@ -242,22 +244,27 @@ if __name__ == '__main__':
 
 
 	A = []
-	# A = torch.randn(num_senses, args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1)
-	# A_i = torch.randn(args.emb_dim, args.emb_dim, device=cuda1, dtype=torch.float32, requires_grad=True)
-	# A_i = torch.randn(args.emb_dim, args.emb_dim, dtype=torch.float32).to(cuda1).detach().requires_grad_(True)
-	# A = [A_i for _ in range(0, num_senses)]
+	# A = [torch.randn(args.emb_dim, requires_grad=True, dtype=torch.float32, device='cuda')]
+
 	for i in range(0, num_senses):
-		A.append(torch.randn(args.emb_dim, args.emb_dim, device='cuda', dtype=torch.float32, requires_grad=True))
+		A.append(torch.randn(args.emb_dim, args.emb_dim, device='cuda', dtype=torch.float32, requires_grad=False))
 
 	# test = torch.zeros((10,10)).to(data.device).detach().requires_grad_(True)
 	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device='cuda', requires_grad=True)]
 	# W = torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=cuda1, requires_grad=True)
-	params = A+W
+	params = W+A
 
 	# params = [W]
 	# for i in range(0, num_senses):
 	#     params.append(torch.randn(args.emb_dim, args.emb_dim, requires_grad=True, dtype=torch.float32, device=cuda1))
 	optimizer = optim.Adam(params, lr)
+	# print('optimizer parameters', optimizer.param_groups)
+
+	# i_list=[i for i in optimizer.param_groups[0].items()]
+
+	# optimizer.param_groups is a list of a dict
+	# optimizer.param_groups[0]['params'] returns a list of trainable parameters
+	# print('parameters', optimizer.param_groups[0]['params'][0])  
 	
 
 	logging.info("------------------Training-------------------")
@@ -267,15 +274,18 @@ if __name__ == '__main__':
 		count = 0 
 
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
+
+			# optimizer.param_groups is a list which contains one dictionary
+			# optimizer.param_groups[0]['params'] returns a list of trainable parameters  
+			# set all the parameters to requires_grad = False
+			for param_group in optimizer.param_groups[0]['params'][1:]:
+				param_group.requires_grad = False
+
 			optimizer.zero_grad()
 			loss = torch.zeros(1, dtype=torch.float32).to(device)
-			# loss = Variable(torch.zeros(1, dtype=torch.float32))
 			count += 1
-			batch_bert = []
-			## batch_sents = [sent_info['tokenized_sentence'] for sent_info in batch]
 
 			# process contextual embeddings in sentences batches of size args.batch_size
-			# batch_bert = bert_embed(batch_sents, merge_strategy=args.merge_strategy)
 			# print('Im here 1')
 
 			for sent_info in batch:
@@ -303,40 +313,39 @@ if __name__ == '__main__':
 						# For the case of taking multiple words as a instance
 						# for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
 						# we use mean to compute the averaged vec for a multiple words expression
-						# vec_c = np.array([sent_bert[i][1] for i in tok_idxs], dtype=np.float32).mean(axis=0)
 
 						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)		
 						# print('Im here 5')				
 					
 						loss += (torch.mm(W[0], vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
-						# print('loss', loss.item())
-						# print('Im here 6')
 
-						del vec_c, vec_g
-						torch.cuda.empty_cache()
-						# print('Im here 7')
-			
+						# set the A matrices that are in a current batch to require gradient
+						optimizer.param_groups[0]['params'][1+index].requires_grad = True
 
-		
-			
-			# print('Im here 8') ### the code is able to print out numer 8 
-			cum_loss += loss.item()
-			loss.backward(retain_graph=True)
+
+			cum_loss += float(loss.item())
+			# loss.backward(retain_graph=True)
+			loss.backward()
 			# print('Im here 9')
 			optimizer.step()
+			# del loss 
+			# torch.cuda.empty_cache()
 			# print('Im here 10')
 
+		# print('Im here 11')
 		cum_loss /= count
+		
 		logging.info("epoch: %d, loss: %f " %(epoch, cum_loss))
 
-	weight = W[0].cpu().detach().numpy()
-	matrix_A = [A[i].cpu().detach().numpy() for _ in range(num_senses)]
 
-
+	# save the trained parameters W and A matrices
+	# W is the first element in optimizer.param_groups[0]['params']
+	weight = optimizer.param_groups[0]['params'][0].cpu().detach().numpy()
+	matrix_A = [optimizer.param_groups[0]['params'][i+1].cpu().detach().numpy() for _ in range(num_senses)]
 
 	logging.info('number of out of vocab word: %d' %(out_of_vocab_num))
-	print('shape of each matrix A', matrix_A[0].shape)
-	print('shape of weight matrix w', weight.shape)	
+	logging.info('shape of each matrix A:', matrix_A[0].shape)
+	logging.info('shape of weight matrix w:', weight.shape)	
 
 	# Build the structures of W and A matrices
 	for n in range(len(sense2idx)):
