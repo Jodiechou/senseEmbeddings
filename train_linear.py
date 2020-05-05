@@ -249,10 +249,10 @@ if __name__ == '__main__':
 		count = 0 
 
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
-
+			
+			# set all of the A matrices to requires_grad = False
 			# optimizer.param_groups is a list which contains one dictionary
 			# optimizer.param_groups[0]['params'] returns a list of trainable parameters  
-			# set all of the A matrices to requires_grad = False
 			# for param_group in optimizer.param_groups[0]['params'][1:]:
 			# 	param_group.requires_grad = False
 			for a in A:
