@@ -253,9 +253,10 @@ if __name__ == '__main__':
 			# optimizer.param_groups is a list which contains one dictionary
 			# optimizer.param_groups[0]['params'] returns a list of trainable parameters  
 			# set all of the A matrices to requires_grad = False
-			for param_group in optimizer.param_groups[0]['params'][1:]:
-				param_group.requires_grad = False
-
+			# for param_group in optimizer.param_groups[0]['params'][1:]:
+			# 	param_group.requires_grad = False
+			for a in A:
+				a.requires_grad = False
 
 			optimizer.zero_grad()
 			loss = torch.zeros(1, dtype=torch.float32).to(device)
