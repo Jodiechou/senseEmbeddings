@@ -291,7 +291,7 @@ if __name__ == '__main__':
 						A[index].requires_grad = True
 						
 
-			cum_loss += float(loss.item())
+			cum_loss += loss.item()
 			loss.backward()
 			optimizer.step()
 
