@@ -111,8 +111,8 @@ def get_args(
 	parser = argparse.ArgumentParser(description='BERT Word Sense Embeddings')
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}.txt'.format(emb_dim, emb_dim))
-	parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}.txt'.format(emb_dim))
-	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseEmbed.semcor_{}.npz'.format(emb_dim))
+	# parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}.txt'.format(emb_dim))
+	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseMatrix.semcor_{}.npz'.format(emb_dim))
 	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
 	parser.add_argument('--num_epochs', default=num_epochs, type=int)
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
@@ -193,7 +193,7 @@ if __name__ == '__main__':
 	sense2idx, sense_matrix = {}, {}
 	idx, index, out_of_vocab_num = 0, 0, 0
 
-	lr = 1e-2
+	lr = 1e-3
 
 	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
 	model = BertModel.from_pretrained('bert-large-cased')
@@ -237,9 +237,10 @@ if __name__ == '__main__':
 		A.append(torch.randn(args.emb_dim, args.emb_dim, dtype=torch.float32, device=device, requires_grad=True))
 
 	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=device, requires_grad=True)]
-	params = W+A
-	optimizer = optim.Adam(params, lr)
-	
+
+	# params = W+A
+	optimizer = optim.Adam(W+A, lr)
+
 
 	logging.info("------------------Training-------------------")
 
@@ -251,9 +252,10 @@ if __name__ == '__main__':
 
 			# optimizer.param_groups is a list which contains one dictionary
 			# optimizer.param_groups[0]['params'] returns a list of trainable parameters  
-			# set all the parameters to requires_grad = False
+			# set all of the A matrices to requires_grad = False
 			for param_group in optimizer.param_groups[0]['params'][1:]:
 				param_group.requires_grad = False
+
 
 			optimizer.zero_grad()
 			loss = torch.zeros(1, dtype=torch.float32).to(device)
@@ -280,16 +282,15 @@ if __name__ == '__main__':
 						# for the case of taking multiple words as a instance
 						# for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
 						# we use mean to compute the averaged vec for a multiple words expression
-
-						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)										
+						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)
 						loss += (torch.mm(W[0], vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
 
 						# set the A matrices that are in a current batch to require gradient
-						optimizer.param_groups[0]['params'][1+index].requires_grad = True
-
+						# optimizer.param_groups[0]['params'][1+index].requires_grad = True
+						A[index].requires_grad = True
+						
 
 			cum_loss += float(loss.item())
-			# loss.backward(retain_graph=True)
 			loss.backward()
 			optimizer.step()
 
@@ -298,9 +299,9 @@ if __name__ == '__main__':
 
 
 	# save the trained parameters W and A matrices
-	# W is the first element in optimizer.param_groups[0]['params']
 	weight = W[0].cpu().detach().numpy()
 	matrix_A = [A[i].cpu().detach().numpy() for _ in range(num_senses)]
+
 
 	logging.info('number of out of vocab word: %d' %(out_of_vocab_num))
 	print('shape of each matrix A:', matrix_A[0].shape)
