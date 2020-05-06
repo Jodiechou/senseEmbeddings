@@ -42,12 +42,13 @@ def load_training_set(train_path, keys_path):
 
 			inst['tokens'] = sum([t.split() for t in inst['tokens_mw']], [])
 
-			# handling multi-word expressions, mapping allows matching tokens with mw features
+			"""handling multi-word expressions, mapping allows matching tokens with mw features"""
 			idx_map_abs = []
 			idx_map_rel = [(i, list(range(len(t.split()))))
 							for i, t in enumerate(inst['tokens_mw'])]
 			token_counter = 0
-			for idx_group, idx_tokens in idx_map_rel:  # converting relative token positions to absolute
+			"""converting relative token positions to absolute"""
+			for idx_group, idx_tokens in idx_map_rel: 
 				idx_tokens = [i+token_counter for i in idx_tokens]
 				token_counter += len(idx_tokens)
 				idx_map_abs.append([idx_group, idx_tokens])
@@ -111,7 +112,6 @@ def get_args(
 	parser = argparse.ArgumentParser(description='BERT Word Sense Embeddings')
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}.txt'.format(emb_dim, emb_dim))
-	# parser.add_argument('--save_sense_emb_path', default='data/vectors/senseEmbed.semcor_{}.txt'.format(emb_dim))
 	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseMatrix.semcor_{}.npz'.format(emb_dim))
 	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
 	parser.add_argument('--num_epochs', default=num_epochs, type=int)
@@ -132,7 +132,7 @@ def get_args(
 	return args
 
 
-# Get embeddings from files
+"""Get embeddings from files"""
 def load_glove_embeddings(fn):
 	embeddings = {}
 	with open(fn, 'r') as gfile:
@@ -157,7 +157,7 @@ def get_bert_embedding(sent):
 		outputs = model(tokens_tensor, token_type_ids=segments_tensors)
 	res = list(zip(tokenized_text[1:-1], outputs[0].cpu().detach().numpy()[0][1:-1])) ## [1:-1] is used to get rid of CLS] and [SEP]
 	
-	## merge subtokens
+	"""merge subtokens"""
 	sent_tokens_vecs = []
 	for token in sent.split():
 		token_vecs = []
@@ -203,8 +203,10 @@ if __name__ == '__main__':
 	train_instances = load_training_set(train_path, keys_path)
 	logging.info("Done. Loaded %d instances from dataset" % len(train_instances))
 	
-	## build sense2idx dictionary
-	## use dictionary to filter sense with the same id
+	"""
+	build sense2idx dictionary
+	use dictionary to filter sense with the same id
+	"""
 	logging.info("Loading Glove Embeddings........")
 	glove_embeddings_full = load_glove_embeddings(args.glove_embedding_path)
 
@@ -214,7 +216,7 @@ if __name__ == '__main__':
 			if sent_instance['senses'][i] is None:
 				continue
 
-			# filter out of vocabulary words 
+			"""filter out of vocabulary words""" 
 			for sense in sent_instance['senses'][i]:
 				if sense in sense2idx:
 					continue
@@ -250,9 +252,11 @@ if __name__ == '__main__':
 
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
 			
-			# set all of the A matrices to requires_grad = False
-			# optimizer.param_groups is a list which contains one dictionary
-			# optimizer.param_groups[0]['params'] returns a list of trainable parameters  
+			"""
+			set all of the A matrices to requires_grad = False
+			optimizer.param_groups is a list which contains one dictionary
+			optimizer.param_groups[0]['params'] returns a list of trainable parameters 
+			"""
 			# for param_group in optimizer.param_groups[0]['params'][1:]:
 			# 	param_group.requires_grad = False
 			for a in A:
@@ -262,7 +266,7 @@ if __name__ == '__main__':
 			loss = torch.zeros(1, dtype=torch.float32).to(device)
 			count += 1
 
-			# process contextual embeddings in sentences batches of size args.batch_size
+			"""process contextual embeddings in sentences batches of size args.batch_size"""
 			for sent_info in batch:
 				idx_map_abs = sent_info['idx_map_abs']
 
@@ -279,15 +283,19 @@ if __name__ == '__main__':
 						index = sense2idx[sense]
 						word = sense.split('%')[0]
 						vec_g = glove_embeddings[word]
-
-						# for the case of taking multiple words as a instance
-						# for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
-						# we use mean to compute the averaged vec for a multiple words expression
+						
+						"""
+						for the case of taking multiple words as a instance
+						for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
+						we use mean to compute the averaged vec for a multiple words expression
+						"""
 						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)
 						loss += (torch.mm(W[0], vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
-
-						# set the A matrices that are in a current batch to require gradient
-						# optimizer.param_groups[0]['params'][1+index].requires_grad = True
+						
+						"""
+						set the A matrices that are in a current batch to require gradient
+						optimizer.param_groups[0]['params'][1+index].requires_grad = True
+						"""
 						A[index].requires_grad = True
 						
 
@@ -299,7 +307,7 @@ if __name__ == '__main__':
 		logging.info("epoch: %d, loss: %f " %(epoch, cum_loss))
 
 
-	# save the trained parameters W and A matrices
+	"""save the trained parameters W and A matrices"""
 	weight = W[0].cpu().detach().numpy()
 	matrix_A = [A[i].cpu().detach().numpy() for _ in range(num_senses)]
 
@@ -308,7 +316,7 @@ if __name__ == '__main__':
 	print('shape of each matrix A:', matrix_A[0].shape)
 	print('shape of weight matrix w:', weight.shape)	
 
-	# build the structures of W and A matrices
+	"""build the structures of W and A matrices"""
 	for n in range(len(sense2idx)):
 		sense_matrix[list(sense2idx.keys())[n]] = matrix_A[n]
 
