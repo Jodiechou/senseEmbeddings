@@ -1,8 +1,6 @@
 import numpy as np 
 import torch.optim as optim
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 import logging
 import argparse
@@ -11,8 +9,6 @@ import lxml.etree
 import xml.etree.ElementTree as ET
 
 import os
-
-import torch
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 
