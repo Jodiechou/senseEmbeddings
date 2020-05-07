@@ -67,7 +67,6 @@ optional arguments:
                         Batch size (BERT) (default: 32)
   -merge_strategy MERGE_STRATEGY
                         WordPiece Reconstruction Strategy (default: mean)
-  -ignore_lemma         Ignore lemma features (default: True)
   -ignore_pos           Ignore POS features (default: True)
   -thresh THRESH        Similarity threshold (default: -1)
   -k K                  Number of Neighbors to accept (default: 1)
