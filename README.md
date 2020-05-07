@@ -80,7 +80,7 @@ $  python eval.py -sv_path data/vectors/senseMatrix.semcor_300.npz -test_set sem
 ## SCWS Evaluation
 To evaluate on SCWS dataset by running this:
 ```
-$ python eval_scws.py -sv_path data/vectors/senseEmbed.semcor_300.txt
+$ python eval_scws.py -sv_path data/vectors/senseMatrix.semcor_300.npz
 ```
 
 ## WiC evaluation
@@ -93,7 +93,7 @@ $ unzip WiC_dataset.zip
 # Sense Comparison
 To evaluate sense comparison, use:
 ```
-$ python eval_wic.py -sv_path data/vectors/senseEmbed.semcor_300.txt -eval_set dev
+$ python eval_wic.py -sv_path data/vectors/senseMatrix.semcor_300.npz -eval_set dev
 ```
 
 
