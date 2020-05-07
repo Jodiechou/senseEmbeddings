@@ -120,7 +120,7 @@ optional arguments:
 
 ```
 ```
-$  python eval.py -sv_path data/vectors/senseEmbed.semcor_300.txt -test_set semeval2007
+$  python eval.py -sv_path data/vectors/senseMatrix.semcor_300.npz -test_set semeval2007
 ```
 
 ## SCWS Evaluation
