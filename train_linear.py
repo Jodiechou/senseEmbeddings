@@ -305,7 +305,7 @@ if __name__ == '__main__':
 
 	"""save the trained parameters W and A matrices"""
 	weight = W[0].cpu().detach().numpy()
-	matrix_A = [A[i].cpu().detach().numpy() for _ in range(num_senses)]
+	matrix_A = [A[i].cpu().detach().numpy() for i in range(num_senses)]
 
 
 	logging.info('number of out of vocab word: %d' %(out_of_vocab_num))
