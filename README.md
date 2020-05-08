@@ -90,7 +90,7 @@ $ cd external/wic
 $ wget https://pilehvar.github.io/wic/package/WiC_dataset.zip
 $ unzip WiC_dataset.zip
 ```
-# Sense Comparison
+### Sense Comparison
 To evaluate sense comparison, use:
 ```
 $ python eval_wic.py -sv_path data/vectors/senseMatrix.semcor_300.npz -eval_set dev
