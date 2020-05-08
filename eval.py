@@ -3,24 +3,51 @@ import logging
 import argparse
 from time import time
 from datetime import datetime
-from functools import lru_cache
 from collections import defaultdict
 from collections import Counter
 import xml.etree.ElementTree as ET
 
 import numpy as np
-from numpy.linalg import norm
+import torch
+
+from transformers import BertTokenizer, BertModel, BertForMaskedLM
 from nltk.corpus import wordnet as wn
-
-from bert_as_service import bert_embed
-
-
 import re
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
 					datefmt='%d-%b-%y %H:%M:%S')
+
+def get_args(
+		emb_dim = 300,
+		batch_size = 64,
+		diag = False
+			 ):
+
+	parser = argparse.ArgumentParser(description='WSD Evaluation.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
+	parser.add_argument('-sv_path', help='Path to sense matrices', required=True)
+	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
+	parser.add_argument('-wsd_fw_path', help='Path to WSD Evaluation Framework', required=False,
+						default='external/wsd_eval/WSD_Evaluation_Framework/')
+	parser.add_argument('-test_set', default='ALL', help='Name of test set', required=False,
+						choices=['senseval2', 'senseval3', 'semeval2007', 'semeval2013', 'semeval2015', 'ALL'])
+	parser.add_argument('-batch_size', type=int, default=batch_size, help='Batch size', required=False)
+	parser.add_argument('-merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False)
+	# parser.add_argument('-ignore_lemma', dest='use_lemma', action='store_false', help='Ignore lemma features', required=False)
+	parser.add_argument('-ignore_pos', dest='use_pos', action='store_false', help='Ignore POS features', required=False)
+	parser.add_argument('-thresh', type=float, default=-1, help='Similarity threshold', required=False)
+	parser.add_argument('-k', type=int, default=1, help='Number of Neighbors to accept', required=False)
+	parser.add_argument('-quiet', dest='debug', action='store_false', help='Less verbose (debug=False)', required=False)
+	parser.add_argument('--device', default='cuda', type=str)
+	# parser.set_defaults(use_lemma=True)
+	parser.set_defaults(use_pos=True)
+	parser.set_defaults(debug=True)
+	args = parser.parse_args()
+
+	return args
 
 
 def load_wsd_fw_set(wsd_fw_set_path):
@@ -53,20 +80,8 @@ def load_wsd_fw_set(wsd_fw_set_path):
 			inst['idx'] = sent_idx
 
 			eval_instances.append(inst)
-			# logging.info('number of sents: %d' %(sent_idx))
 
 	return eval_instances
-
-
-@lru_cache()
-def wn_sensekey2synset(sensekey):
-	"""Convert sensekey to synset."""
-	lemma = sensekey.split('%')[0]
-	for synset in wn.synsets(lemma):
-		for lemma in synset.lemmas():
-			if lemma.key() == sensekey:
-				return synset
-	return None
 
 
 def get_id2sks(wsd_eval_keys):
@@ -95,28 +110,37 @@ def chunks(l, n):
 		yield l[i:i + n]
 
 
-def str_scores(scores, n=3, r=5):
+def str_scores(scores, n=3, r=5):  ###
 	"""Convert scores list to a more readable string."""
 	return str([(l, round(s, r)) for l, s in scores[:n]])
 
 
-def load_senseEmbeddings(path):
-	logging.info("Loading Pre-trained Sense Embeddings ...")
-	embed_sense = {}
+def load_senseMatrices_npz(path):
+	logging.info("Loading Pre-trained Sense Matrices ...")
+	A = np.load(path, allow_pickle=True)	# A is loaded a 0d array
+	A = np.atleast_1d(A.f.arr_0)			# convert it to a 1d array with 1 element
+	A = A[0]								# a dictionary, key is sense id and value is sense matrix 
+	logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(A))
+	return A
+
+
+def load_senseMatrices_txt(path):
+	logging.info("Loading Pre-trained Sense Matrices ...")
+	A = {}
 	with open(path, 'r') as sfile:
 		for line in sfile:
 			splitLine = line.split(' ')
 			sense = splitLine[0]
-			vec_sense = np.array(splitLine[1:], dtype='float32')
-			embed_sense[sense] = vec_sense
-	logging.info("Done. Loaded %d words from Pre-trained Sense Embeddings" % len(embed_sense))
-	return embed_sense
+			matrix = np.array(splitLine[1:])
+			A[sense] = matrix
+	logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(A))
+	return A
 
 
 def load_weight(path):
 	logging.info("Loading Model Parameters W ...")
 	weight = np.load(path)
-	weight = np.array(weight)
+	weight = weight.f.arr_0
 	logging.info('Loaded Model Parameters W')
 	return weight
 
@@ -136,28 +160,56 @@ def get_sk_type(sensekey):
 	return int(sensekey.split('%')[1].split(':')[0])
 
 
+def get_bert_embedding(sent):
+	tokenized_text = tokenizer.tokenize("[CLS] {0} [SEP]".format(sent))
+	indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+	segments_ids = [0 for i in range(len(indexed_tokens))]
+	tokens_tensor = torch.tensor([indexed_tokens])
+	segments_tensors = torch.tensor([segments_ids])
+	tokens_tensor = tokens_tensor.to(device)
+	segments_tensors = segments_tensors.to(device)
+	model.to(device)
+	with torch.no_grad():
+		outputs = model(tokens_tensor, token_type_ids=segments_tensors)
+	res = list(zip(tokenized_text[1:-1], outputs[0].cpu().detach().numpy()[0][1:-1])) ## [1:-1] is used to get rid of CLS] and [SEP]
+	
+	## merge subtokens
+	sent_tokens_vecs = []
+	for token in sent.split():
+		token_vecs = []
+		sub = []
+		for subtoken in tokenizer.tokenize(token):
+			encoded_token, encoded_vec = res.pop(0)
+			sub.append(encoded_token)
+			token_vecs.append(encoded_vec)
+			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) 
+			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)
+		sent_tokens_vecs.append((token, merged_vec))
+
+	return sent_tokens_vecs
+
+
+"""Get embeddings from files"""
+def load_glove_embeddings(fn):
+	embeddings = {}
+	with open(fn, 'r') as gfile:
+		for line in gfile:
+			splitLine = line.split(' ')
+			word = splitLine[0]
+			vec = np.array(splitLine[1:], dtype='float32')
+			embeddings[word] = vec
+	return embeddings
+
+
 if __name__ == '__main__':
 
-	parser = argparse.ArgumentParser(description='WSD Evaluation.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=True)
-	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_1024_{}.npy'.format(300))
-	# parser.add_argument('-ft_path', help='Path to fastText vectors', required=False,
-	# 					default='external/fasttext/crawl-300d-2M-subword.bin')
-	parser.add_argument('-wsd_fw_path', help='Path to WSD Evaluation Framework', required=False,
-						default='external/wsd_eval/WSD_Evaluation_Framework/')
-	parser.add_argument('-test_set', default='ALL', help='Name of test set', required=False,
-						choices=['senseval2', 'senseval3', 'semeval2007', 'semeval2013', 'semeval2015', 'ALL'])
-	parser.add_argument('-batch_size', type=int, default=32, help='Batch size (BERT)', required=False)
-	parser.add_argument('-merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False)
-	parser.add_argument('-ignore_lemma', dest='use_lemma', action='store_false', help='Ignore lemma features', required=False)
-	parser.add_argument('-ignore_pos', dest='use_pos', action='store_false', help='Ignore POS features', required=False)
-	parser.add_argument('-thresh', type=float, default=-1, help='Similarity threshold', required=False)
-	parser.add_argument('-k', type=int, default=1, help='Number of Neighbors to accept', required=False)
-	parser.add_argument('-quiet', dest='debug', action='store_false', help='Less verbose (debug=False)', required=False)
-	parser.set_defaults(use_lemma=True)
-	parser.set_defaults(use_pos=True)
-	parser.set_defaults(debug=True)
-	args = parser.parse_args()
+	args = get_args()
+
+	if torch.cuda.is_available() is False and args.device == 'cuda':
+		print("Switching to CPU because Jodie doesn't have a GPU !!")
+		args.device = 'cpu'
+
+	device = torch.device(args.device)
 
 	"""
 	Load pre-trianed sense embeddings for evaluation.
@@ -167,27 +219,28 @@ if __name__ == '__main__':
 	sensekeys = []
 	lemmas = []
 	vectors = []
-	sense2idx = []
 
+	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
+	model = BertModel.from_pretrained('bert-large-cased')
+	model.eval()
 
-	sensesEmbed= load_senseEmbeddings(args.sv_path)
-	senseKeys = list(sensesEmbed.keys())
-	vectors = list(sensesEmbed.values())
-	#print('sensesEmbed', sensesEmbed)
+	"""
+	load pre-trained parameters
+	A is a dictionary, key is sense id and value is sense matrix
+	"""
+	A = load_senseMatrices_npz(args.sv_path)
+	W = load_weight(args.load_weight_path)
+	W = torch.from_numpy(W).to(device)
+	
+
+	senseKeys = list(A.keys())
+	matrices = list(A.values())
 	lemmas = [elem.split('%')[0] for elem in senseKeys]
-	sense2idx = [(sen, i) for i, sen in enumerate(senseKeys)]
-	#print('vectors shape:', vectors.shape) #  shape: (206, 300) -- (the number of senses, 300 dimemsions)
-
-	w = load_weight(args.load_weight_path)
 	
 	"""
 	Initialize various counters for calculating supplementary metrics.
 	"""
 	n_instances, n_correct, n_unk_lemmas, acc_sum = 0, 0, 0, 0
-	# correct_idxs = []
-	# num_options = []
-	#predictions = []
-	currSenses = []
 	failed_by_pos = defaultdict(list)
 
 	pos_confusion = {}
@@ -201,8 +254,18 @@ if __name__ == '__main__':
 	wsd_fw_set_path = args.wsd_fw_path + 'Evaluation_Datasets/%s/%s.data.xml' % (args.test_set, args.test_set)
 	wsd_fw_gold_path = args.wsd_fw_path + 'Evaluation_Datasets/%s/%s.gold.key.txt' % (args.test_set, args.test_set)
 	id2senses = get_id2sks(wsd_fw_gold_path)
+	logging.info('Formating testing data')
 	eval_instances = load_wsd_fw_set(wsd_fw_set_path)
+	logging.info('Finish formating testing data')
 
+	"""
+	build sense2idx dictionary
+	use dictionary to filter sense with the same id
+	"""
+	logging.info("Loading Glove Embeddings........")
+	glove_embeddings = load_glove_embeddings(args.glove_embedding_path)
+	logging.info("Done. Loaded words from GloVe embeddings")
+	
 	
 	"""
 	Iterate over evaluation instances and write predictions in WSD_Evaluation_Framework's format.
@@ -211,58 +274,46 @@ if __name__ == '__main__':
 	results_path = 'data/results/%d.%s.%s.key' % (int(time()), args.test_set, args.merge_strategy)
 	with open(results_path, 'w') as results_f:
 		for batch_idx, batch in enumerate(chunks(eval_instances, args.batch_size)):
-			batch_sents = [sent_info['tokenized_sentence'] for sent_info in batch]
 
-			# process contextual embeddings in sentences batches of size args.batch_size
-			batch_bert = bert_embed(batch_sents, merge_strategy=args.merge_strategy)
-
-			for sent_info, sent_bert in zip(batch, batch_bert):
+			for sent_info in batch:
 				idx_map_abs = sent_info['idx_map_abs']
+				sent_bert = get_bert_embedding(sent_info['tokenized_sentence'])
 
 				for mw_idx, tok_idxs in idx_map_abs:
 					curr_id = sent_info['senses'][mw_idx]
-
+					"""check if a word contains sense id"""
 					if curr_id is None:
 						continue
-
+			
 					curr_lemma = sent_info['lemmas'][mw_idx]
-
-					if args.use_lemma and curr_lemma not in lemmas:
+					if curr_lemma not in lemmas:
 						continue  # skips hurt performance in official scorer
 
 					curr_postag = sent_info['pos'][mw_idx]
 					curr_tokens = [sent_info['tokens'][i] for i in tok_idxs]
-					currVec_c = np.array([sent_bert[i][1] for i in tok_idxs]).mean(axis=0)
-					# This is for converting different dimensions of vectors. 
-					currVec_c = currVec_c / np.linalg.norm(currVec_c)
-					#print('current lemmas:', curr_lemma)  # curr_lemma is the lemma in both pre-trained sense lemmas and in current dataset
-
+					if curr_lemma not in glove_embeddings.keys():
+						continue
+					currVec_g = torch.from_numpy(glove_embeddings[curr_lemma].reshape(300, 1)).to(device)
+					currVec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)				
 
 					disSims = []
 
-					
-
-					# Check the disimilarity between senses and a word
-					# Only consider the possible set of senses (with the same lemma) for each word 
-					for sen2idx in sense2idx:
-						if curr_lemma == sen2idx[0].split('%')[0]: 
-							index = sen2idx[1]
-							senseVec = vectors[index]
-							z = np.matmul(currVec_c, w) - senseVec
-							disSim = norm(z, z)
-							disSims.append((disSim, sen2idx[0]))
+					for sense_id in senseKeys:
+						"""check if curr_lemma is in both pre-trained sense matrices and current dataset"""
+						if curr_lemma == sense_id.split('%')[0]: 
+							A_matrix = torch.from_numpy(A[sense_id]).to(device)
+							z = (torch.mm(W, currVec_c) - torch.mm(A_matrix, currVec_g)).norm() ** 2
+							disSims.append((z.item(), sense_id))
 						
-					
+					"""take the neareast neighbour as the predicted sense"""
 					disSims = sorted(disSims, key=lambda x: x[0])
+					# print('disSims', disSims)
 					minDissim = disSims[0]
 					predict = minDissim[1]
 					
-
 					results_f.write('%s %s\n' % (curr_id, predict))
 
-
-
-					# check if our prediction(s) was correct, register POS of mistakes
+					"""check if our prediction(s) was correct, register POS of mistakes"""
 					n_instances += 1
 					wsd_correct = False
 					gold_sensekeys = id2senses[curr_id]
@@ -280,24 +331,15 @@ if __name__ == '__main__':
 							failed_by_pos[curr_postag].append((None, gold_sensekeys))
 
 
-					# register if our prediction belonged to a different POS than gold
+					"""register if our prediction belonged to a different POS than gold"""
 					if len(predict) > 0:
 						pred_sk_pos = get_sk_pos(predict)
 						gold_sk_pos = get_sk_pos(gold_sensekeys[0])
 						pos_confusion[gold_sk_pos][pred_sk_pos] += 1
 
-					# # register how far the correct prediction was from the top of our matches
-					# correct_idx = None
-					# for idx, (matched_sensekey, matched_score) in enumerate(matches):
-					# 	if matched_sensekey in gold_sensekeys:
-					# 		correct_idx = idx
-					# 		correct_idxs.append(idx)
-					# 		break
-
-					if args.debug:
-						acc = n_correct / n_instances
-						logging.debug('ACC: %.3f (%d %d/%d)' % (
-							acc, n_instances, sent_info['idx'], len(eval_instances)))
+					acc = n_correct / n_instances
+					logging.info('ACC: %.3f (%d %d/%d)' % (
+						acc, n_instances, sent_info['idx'], len(eval_instances)))
 
 
 
@@ -311,19 +353,5 @@ if __name__ == '__main__':
 			logging.info('%s - %s' % (pos, str(pos_confusion[pos])))
 
 
-
 	logging.info('Running official scorer ...')
-	run_scorer(args.wsd_fw_path, args.test_set, results_path)
-
-
-
-
-
-
-
-					
-
-
-
-
-					
+	run_scorer(args.wsd_fw_path, args.test_set, results_path)			
