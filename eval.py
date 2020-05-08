@@ -258,14 +258,9 @@ if __name__ == '__main__':
 	eval_instances = load_wsd_fw_set(wsd_fw_set_path)
 	logging.info('Finish formating testing data')
 
-	"""
-	build sense2idx dictionary
-	use dictionary to filter sense with the same id
-	"""
 	logging.info("Loading Glove Embeddings........")
 	glove_embeddings = load_glove_embeddings(args.glove_embedding_path)
 	logging.info("Done. Loaded words from GloVe embeddings")
-	
 	
 	"""
 	Iterate over evaluation instances and write predictions in WSD_Evaluation_Framework's format.
