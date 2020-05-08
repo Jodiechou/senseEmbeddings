@@ -141,6 +141,7 @@ def load_glove_embeddings(fn):
 
 
 def get_bert_embedding(sent):
+	"""input: a sentence, output: word embeddigns for the words apprearing in the sentence"""
 	tokenized_text = tokenizer.tokenize("[CLS] {0} [SEP]".format(sent))
 	indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
 	segments_ids = [0 for i in range(len(indexed_tokens))]
