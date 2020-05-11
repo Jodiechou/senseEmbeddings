@@ -22,36 +22,37 @@ def load_training_set(train_path, keys_path):
 	"""Parse XML of split set and return list of instances (dict)."""
 	train_instances = []
 	sense_mapping = get_sense_mapping(keys_path)
-	tree = ET.parse(train_path)
-	for text in tree.getroot():
-		for sent_idx, sentence in enumerate(text):
-			inst = {'tokens': [], 'tokens_mw': [], 'lemmas': [], 'senses': [], 'pos': [], 'id': []}
-			for e in sentence:
-				inst['tokens_mw'].append(e.text)
-				inst['lemmas'].append(e.get('lemma'))
-				inst['id'].append(e.get('id'))
-				inst['pos'].append(e.get('pos'))
-				if 'id' in e.attrib.keys():
-					inst['senses'].append(sense_mapping[e.get('id')])
-				else:
-					inst['senses'].append(None)
+	# tree = ET.parse(train_path)
+	# for text in tree.getroot():
+	text = read_xml_sents(train_path)
+	for sent_idx, sentence in enumerate(text):
+		inst = {'tokens': [], 'tokens_mw': [], 'lemmas': [], 'senses': [], 'pos': [], 'id': []}
+		for e in sentence:
+			inst['tokens_mw'].append(e.text)
+			inst['lemmas'].append(e.get('lemma'))
+			inst['id'].append(e.get('id'))
+			inst['pos'].append(e.get('pos'))
+			if 'id' in e.attrib.keys():
+				inst['senses'].append(sense_mapping[e.get('id')])
+			else:
+				inst['senses'].append(None)
 
-			inst['tokens'] = sum([t.split() for t in inst['tokens_mw']], [])
+		inst['tokens'] = sum([t.split() for t in inst['tokens_mw']], [])
 
-			"""handling multi-word expressions, mapping allows matching tokens with mw features"""
-			idx_map_abs = []
-			idx_map_rel = [(i, list(range(len(t.split()))))
-							for i, t in enumerate(inst['tokens_mw'])]
-			token_counter = 0
-			"""converting relative token positions to absolute"""
-			for idx_group, idx_tokens in idx_map_rel: 
-				idx_tokens = [i+token_counter for i in idx_tokens]
-				token_counter += len(idx_tokens)
-				idx_map_abs.append([idx_group, idx_tokens])
-			inst['tokenized_sentence'] = ' '.join(inst['tokens'])
-			inst['idx_map_abs'] = idx_map_abs
-			inst['idx'] = sent_idx
-			train_instances.append(inst)
+		"""handling multi-word expressions, mapping allows matching tokens with mw features"""
+		idx_map_abs = []
+		idx_map_rel = [(i, list(range(len(t.split()))))
+						for i, t in enumerate(inst['tokens_mw'])]
+		token_counter = 0
+		"""converting relative token positions to absolute"""
+		for idx_group, idx_tokens in idx_map_rel:  
+			idx_tokens = [i+token_counter for i in idx_tokens]
+			token_counter += len(idx_tokens)
+			idx_map_abs.append([idx_group, idx_tokens])
+		inst['tokenized_sentence'] = ' '.join(inst['tokens'])
+		inst['idx_map_abs'] = idx_map_abs
+		inst['idx'] = sent_idx
+		train_instances.append(inst)
 
 	return train_instances
 
@@ -73,8 +74,8 @@ def get_sense_mapping(keys_path):
 	return sensekey_mapping
 
 
-def read_xml_sents(xml_path):
-	with open(xml_path) as f:
+def read_xml_sents(train_path):
+	with open(train_path) as f:
 		for line in f:
 			line = line.strip()
 			if line.startswith('<sentence '):
@@ -99,17 +100,17 @@ def save_pickle_dict(path, mat):
 
 
 def get_args(
-		num_epochs = 10,
+		num_epochs = 50,
 		emb_dim = 300,
 		batch_size = 64,
 		diag = False
 			 ):
 
-	parser = argparse.ArgumentParser(description='BERT Word Sense Embeddings')
+	parser = argparse.ArgumentParser(description='Word Sense Mapping')
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor_{}_{}.txt'.format(emb_dim, emb_dim))
-	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseMatrix.semcor_{}.npz'.format(emb_dim))
-	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
+	parser.add_argument('--sense_matrix_path', type=str, default='data/vectors/senseMatrix.semcor+omsti_{}_{}_50.txt'.format(emb_dim, emb_dim))
+	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseMatrix.semcor+omsti_{}_50.npz'.format(emb_dim))
+	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor+omsti_1024_{}_50.npz'.format(emb_dim))
 	parser.add_argument('--num_epochs', default=num_epochs, type=int)
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
@@ -119,7 +120,7 @@ def get_args(
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('--dataset', default='semcor', help='Name of dataset', required=False,
 						choices=['semcor', 'semcor_omsti'])
-	parser.add_argument('--batch_size', type=int, default=batch_size, help='Batch size (BERT)', required=False)
+	parser.add_argument('--batch_size', type=int, default=batch_size, help='Batch size', required=False)
 	parser.add_argument('--merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False,
 						choices=['mean', 'first', 'sum'])
 
@@ -155,7 +156,8 @@ def get_bert_embedding(sent):
 	model.to(device)
 	with torch.no_grad():
 		outputs = model(tokens_tensor, token_type_ids=segments_tensors)
-	res = list(zip(tokenized_text[1:-1], outputs[0].cpu().detach().numpy()[0][1:-1])) ## [1:-1] is used to get rid of CLS] and [SEP]
+	"""[1:-1] is used to get rid of CLS] and [SEP]"""
+	res = list(zip(tokenized_text[1:-1], outputs[0].cpu().detach().numpy()[0][1:-1])) 
 	
 	"""merge subtokens"""
 	sent_tokens_vecs = []
@@ -202,7 +204,7 @@ if __name__ == '__main__':
 	logging.info("Loading Training Data........")
 	train_instances = load_training_set(train_path, keys_path)
 	logging.info("Done. Loaded %d instances from dataset" % len(train_instances))
-	
+
 	"""
 	build sense2idx dictionary
 	use dictionary to filter sense with the same id
@@ -216,7 +218,7 @@ if __name__ == '__main__':
 			if sent_instance['senses'][i] is None:
 				continue
 
-			"""filter out of vocabulary words""" 
+			# filter out of vocabulary words 
 			for sense in sent_instance['senses'][i]:
 				if sense in sense2idx:
 					continue
@@ -251,12 +253,13 @@ if __name__ == '__main__':
 		count = 0 
 
 		for batch_idx, batch in enumerate(chunks(train_instances, args.batch_size)):
-			
+
 			"""
 			set all of the A matrices to requires_grad = False
 			optimizer.param_groups is a list which contains one dictionary
 			optimizer.param_groups[0]['params'] returns a list of trainable parameters 
-			"""
+			""" 
+
 			# for param_group in optimizer.param_groups[0]['params'][1:]:
 			# 	param_group.requires_grad = False
 			for a in A:
@@ -283,7 +286,7 @@ if __name__ == '__main__':
 						index = sense2idx[sense]
 						word = sense.split('%')[0]
 						vec_g = glove_embeddings[word]
-						
+
 						"""
 						for the case of taking multiple words as a instance
 						for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
@@ -291,16 +294,15 @@ if __name__ == '__main__':
 						"""
 						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)
 						loss += (torch.mm(W[0], vec_c) - torch.mm(A[index], vec_g)).norm() ** 2
-						
-						"""
-						set the A matrices that are in a current batch to require gradient
-						optimizer.param_groups[0]['params'][1+index].requires_grad = True
-						"""
+
+						"""set the A matrices that are in a current batch to require gradient"""
+						# optimizer.param_groups[0]['params'][1+index].requires_grad = True
 						A[index].requires_grad = True
 						
 
 			cum_loss += loss.item()
 			loss.backward()
+
 			optimizer.step()
 
 		cum_loss /= count
