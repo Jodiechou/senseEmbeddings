@@ -6,7 +6,7 @@ import logging
 import argparse
 
 import lxml.etree
-import xml.etree.ElementTree as ET
+# import xml.etree.ElementTree as ET
 
 import os
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
