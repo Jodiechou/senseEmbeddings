@@ -3,13 +3,16 @@ import sys
 import nltk
 import numpy as np
 import torch
+from functools import lru_cache
 # from numpy import dot
 # from numpy.linalg import norm
 from nltk.tokenize import sent_tokenize
+from nltk.stem import WordNetLemmatizer
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 import logging
 import argparse
 import scipy
+wn_lemmatizer = WordNetLemmatizer()
 
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -33,6 +36,12 @@ def get_args(
 	args = parser.parse_args()
 
 	return args
+
+
+@lru_cache()
+def wn_lemmatize(w):
+	w = w.lower()
+	return wn_lemmatizer.lemmatize(w)
 
 
 def load_senseMatrices_npz(path):
@@ -253,14 +262,23 @@ if __name__ == '__main__':
 		dist2vec2 = []
 
 		for sense_id in senseKeys:
-			if contEmbed1[0] == sense_id.split('%')[0]:
+			# print('word 1: ', contEmbed1[0])
+			# print('*****',sense_id.split('%')[0])
+			curr_lemma1 = wn_lemmatize(contEmbed1[0])
+			if curr_lemma1 == sense_id.split('%')[0]:
+				# index1 = s[1]
+				# senseVec1 = vectors[index1]
+				# z1 = np.matmul(contEmbed1[0][1], w) - senseVec1
 				currVec_g1 = torch.from_numpy(glove_embeddings[contEmbed1[0]].reshape(300, 1)).to(device)
 				A_matrix1 = torch.from_numpy(A[sense_id]).to(device)
 				senseVec1 = torch.mm(A_matrix1, currVec_g1)
 				z1 = (torch.mm(W, contEmbed1[1]) - senseVec1).norm() ** 2
 				dist2vec1.append((z1, senseVec1))
 
-			if contEmbed2[0] == sense_id.split('%')[0]:
+			curr_lemma2 = wn_lemmatize(contEmbed2[0])
+			if curr_lemma2 == sense_id.split('%')[0]:
+				# index2 = s[1]
+				# senseVec2 = vectors[index2]
 				currVec_g2 = torch.from_numpy(glove_embeddings[contEmbed2[0]].reshape(300, 1)).to(device)
 				A_matrix2 = torch.from_numpy(A[sense_id]).to(device)
 				senseVec2 = torch.mm(A_matrix2, currVec_g2)
@@ -300,5 +318,5 @@ if __name__ == '__main__':
 	pearson = scipy.stats.pearsonr(human_ratings, similarities)
 
 
-	logging.info('Spearman Rank:', spr)
-	logging.info('Pearson Correlation:', pearson)
+	print('Spearman Rank:', spr)
+	print('Pearson Correlation:', pearson)
