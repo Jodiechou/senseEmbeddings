@@ -238,7 +238,7 @@ if __name__ == '__main__':
 	A = []
 
 	for i in range(0, num_senses):
-		A.append(torch.randn(args.emb_dim, args.emb_dim, dtype=torch.float32, device=device, requires_grad=True))
+		A.append(torch.randn(args.emb_dim, args.emb_dim, dtype=torch.float32, device=device, requires_grad=False))
 
 	W = [torch.randn(args.emb_dim, 1024, dtype=torch.float32, device=device, requires_grad=True)]
 
