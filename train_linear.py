@@ -324,7 +324,7 @@ if __name__ == '__main__':
 
 	logging.info("Total number of senses %d " %(len(sense_matrix)))
 
-	write_to_file(args.sense_matrix_path, sense_matrix)
+# 	write_to_file(args.sense_matrix_path, sense_matrix)
 
 	np.savez(args.save_sense_matrix_path, sense_matrix)
 	logging.info('Written %s' % args.save_sense_matrix_path)
