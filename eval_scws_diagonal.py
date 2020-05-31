@@ -201,8 +201,8 @@ if __name__ == '__main__':
 	vectors = []
 	sense2idx = []
 
-	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
-	model = BertModel.from_pretrained('bert-large-cased')
+	tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+	model = BertModel.from_pretrained('bert-base-cased')
 	model.eval()
 
 	logging.info("Loading Glove Embeddings........")
