@@ -15,7 +15,7 @@ import scipy
 wn_lemmatizer = WordNetLemmatizer()
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
@@ -28,15 +28,17 @@ def get_args(
 			 ):
 
 	parser = argparse.ArgumentParser(description='Evaluation on SCWS dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('-merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False)
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=True)
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonalI_{}_150.npz'.format(emb_dim))
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
+	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.768.txt')
+	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.1024.txt')
+	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonalI_1024_{}_150.npz'.format(emb_dim))
 	parser.add_argument('--device', default='cuda', type=str)
 	args = parser.parse_args()
 
 	return args
-
 
 @lru_cache()
 def wn_lemmatize(w):
@@ -98,6 +100,7 @@ def get_bert_embedding(sent):
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) 
 			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)
+			##merged_vec = torch.from_numpy(merged_vec).to(device)
 		sent_tokens_vecs.append((token, merged_vec))
 
 	return sent_tokens_vecs
@@ -134,7 +137,6 @@ def load_eval_scws_set():
 	instance = []
 	with open('external/SCWS/ratings.txt') as infp:
 		for line in infp:
-			#print(line)
 			line = line.strip().lower()
 			line = line.split('\t')
 			id = line[0]
@@ -146,16 +148,10 @@ def load_eval_scws_set():
 
 			if word1 not in lemmas or word2 not in lemmas:
 				continue
-			# if word2sense[word1]!='3' or word2sense[word2]!='3':
-			# 	print(word2sense[word1], word2sense[word2])
 					
 			context1 = sent_tokenize(line[5])
 			context2 = sent_tokenize(line[6])
-			# context1 = line[5]
-			# context2 = line[6]
-			# print('context1', context1)
-			# print('context2', context2)
-
+		
 			found = False
 			for sentence in context1:
 				# print('sentence', sentence)
@@ -178,17 +174,11 @@ def load_eval_scws_set():
 			aveR = (line[7])
 			Rs = map(float,line[8:])
 
-			# print('context1 without smooth', context1)
-					
-			# context1 = smooth(context1)
-			# print('context1 after smooth', context1)
-			# context2 = smooth(context2)
 			location1, context1 = extractLocation(context1, word1)
 			location2, context2 = extractLocation(context2, word2)
 
 			instance.append((context1, context2, location1, location2, aveR))
-			# instance = {'context1':[], 'context2': [], 'location1': [], 'location2': [], 'aveR': []}
-
+			
 	return instance
 
 
@@ -211,8 +201,8 @@ if __name__ == '__main__':
 	vectors = []
 	sense2idx = []
 
-	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
-	model = BertModel.from_pretrained('bert-large-cased')
+	tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+	model = BertModel.from_pretrained('bert-base-cased')
 	model.eval()
 
 	logging.info("Loading Glove Embeddings........")
@@ -227,8 +217,10 @@ if __name__ == '__main__':
 	A = load_senseMatrices_npz(args.sv_path)
 	W = load_weight(args.load_weight_path)
 	W = torch.from_numpy(W).to(device)
-	
+	#print('A matrixes:', A)
 
+	vector_ones = torch.ones(args.emb_dim, dtype=torch.float32, device=device, requires_grad=False)
+	
 	senseKeys = list(A.keys())
 	matrices = list(A.values())
 	lemmas = [elem.split('%')[0] for elem in senseKeys]
@@ -239,69 +231,68 @@ if __name__ == '__main__':
 
 	human_ratings = []
 	similarities = []
-	# print('eval_instances', eval_instances)
 
 	for inst in eval_instances:
-		# print('inst', inst)
 		sent_bert1 = get_bert_embedding(inst[0])
 		sent_bert2 = get_bert_embedding(inst[1])
-		# print("sent_bert1", sent_bert1)
-		# print('sent_bert2', sent_bert1)
+		
 
-		"""
+		'''
 		obtain contextualised word embeddings for w1 and w2
 		inst[2] and inst[3] are the locations for w1 and w2, respectively
-		"""
+		'''
 		contEmbed1 = sent_bert1[inst[2]]
 		contEmbed2 = sent_bert2[inst[3]]
-
-		# print('word 1: ', contEmbed1[0])
-		# print('word 2: ', contEmbed2[0])
 
 		dist2vec1 = []
 		dist2vec2 = []
 
-		for sense_id in senseKeys:
-			# print('word 1: ', contEmbed1[0])
-			# print('*****',sense_id.split('%')[0])
-			curr_lemma1 = wn_lemmatize(contEmbed1[0])
-			if curr_lemma1 == sense_id.split('%')[0]:
-				# index1 = s[1]
-				# senseVec1 = vectors[index1]
-				# z1 = np.matmul(contEmbed1[0][1], w) - senseVec1
-				currVec_g1 = torch.from_numpy(glove_embeddings[contEmbed1[0]].reshape(300, 1)).to(device)
-				A_matrix1 = torch.from_numpy(A[sense_id]).to(device)
-				senseVec1 = torch.mm(A_matrix1, currVec_g1)
-				z1 = (torch.mm(W, contEmbed1[1]) - senseVec1).norm() ** 2
-				dist2vec1.append((z1, senseVec1))
+		curr_lemma1 = wn_lemmatize(contEmbed1[0])
+		curr_lemma2 = wn_lemmatize(contEmbed2[0])
 
-			curr_lemma2 = wn_lemmatize(contEmbed2[0])
+		for sense_id in senseKeys:
+			if curr_lemma1 == sense_id.split('%')[0]:
+				
+				##currVec_g1 = torch.from_numpy(glove_embeddings[contEmbed1[0]].reshape(300, 1)).to(device)
+				currVec_g1 = torch.from_numpy(glove_embeddings[contEmbed1[0]]).to(device)
+				A_matrix1 = torch.from_numpy(A[sense_id]).to(device)
+				senseVec1 = A_matrix1 * currVec_g1
+				
+				##distance1 = ((torch.mm(W, contEmbed1[1]).squeeze(1)) - senseVec1).norm() ** 2
+				##distance1 = (contEmbed1[1] - senseVec1).norm() ** 2 
+
+				'''For diagonal matrices with regulariser'''
+				distance1 = ((torch.mm(W, contEmbed1[1]).squeeze(1)) - senseVec1).norm() ** 2 + (A_matrix1 - vector_ones).norm() ** 2
+				##distance1 = (contEmbed1[1] - senseVec1).norm() ** 2 + (A_matrix1 - vector_ones).norm() ** 2
+				dist2vec1.append((distance1, senseVec1))
+
 			if curr_lemma2 == sense_id.split('%')[0]:
-				# index2 = s[1]
-				# senseVec2 = vectors[index2]
-				currVec_g2 = torch.from_numpy(glove_embeddings[contEmbed2[0]].reshape(300, 1)).to(device)
+				##currVec_g2 = torch.from_numpy(glove_embeddings[contEmbed2[0]].reshape(300, 1)).to(device)
+				currVec_g2 = torch.from_numpy(glove_embeddings[contEmbed2[0]]).to(device)
 				A_matrix2 = torch.from_numpy(A[sense_id]).to(device)
-				senseVec2 = torch.mm(A_matrix2, currVec_g2)
-				z2 = (torch.mm(W, contEmbed2[1]) - senseVec2).norm() ** 2
-				dist2vec2.append((z2, senseVec2))
+				senseVec2 = A_matrix2 * currVec_g2
+				
+				##distance2 = ((torch.mm(W, contEmbed2[1]).squeeze(1)) - senseVec2).norm() ** 2
+				##distance2 = (contEmbed2[1] - senseVec2).norm() ** 2
+
+				'''For diagonal matrices with regulariser'''
+				distance2 = ((torch.mm(W, contEmbed2[1]).squeeze(1)) - senseVec2).norm() ** 2 + (A_matrix2 - vector_ones).norm() ** 2
+				##distance2 = (contEmbed2[1] - senseVec2).norm() ** 2 + (A_matrix2 - vector_ones).norm() ** 2
+				dist2vec2.append((distance2, senseVec2))
+
 
 		if len(dist2vec1)>0 and len(dist2vec2)>0:
 			sort_dist1 = sorted(dist2vec1, key=lambda x: x[0])
 			sort_dist2 = sorted(dist2vec2, key=lambda x: x[0])
-
-
-			# print('sort_dist1', sort_dist1)
-			# print('sort_dist2', sort_dist2)
 		
 			minDist1 = sort_dist1[0]
 			minDist2 = sort_dist2[0]
 
-			embed1 = minDist1[1].squeeze(1)
-			embed2 = minDist2[1].squeeze(1)
+			''' uncomment this when evaluate diagonal matrices '''
+			embed1 = minDist1[1]
+			embed2 = minDist2[1]
 
 			cos_sim = torch.dot(embed1, embed2)/(embed1.norm()*embed2.norm())
-
-			# print('cos_sim', cos_sim)
 			similarities.append(cos_sim.cpu().detach().numpy())
 
 			curr_rating = float(inst[4])
@@ -311,8 +302,8 @@ if __name__ == '__main__':
 	similarities = np.array(similarities)
 	human_ratings = np.array(human_ratings)
 
-	# print('human_ratings', human_ratings)
-	# print('similarities', similarities)
+	print('human_ratings', human_ratings)
+	print('similarities', similarities)
 
 	spr = scipy.stats.spearmanr(human_ratings, similarities)
 	pearson = scipy.stats.pearsonr(human_ratings, similarities)
@@ -320,3 +311,4 @@ if __name__ == '__main__':
 
 	print('Spearman Rank:', spr)
 	print('Pearson Correlation:', pearson)
+
