@@ -30,11 +30,11 @@ def get_args(
 
 	parser = argparse.ArgumentParser(description='Evaluation of WiC solution using LMMS for sense comparison.')
 	parser.add_argument('-eval_set', default='dev', help='Evaluation set', required=False, choices=['train', 'dev', 'test'])
-	##parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_{}_150.npz'.format(emb_dim))
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_{}_150.npz'.format(emb_dim))
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.768.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.1024.txt')
-	##parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_1024_{}_150.npz'.format(emb_dim))
+	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_1024_{}_150.npz'.format(emb_dim))
 	parser.add_argument('-device', default='cuda', type=str)
 	args = parser.parse_args()
 
@@ -282,8 +282,8 @@ if __name__ == '__main__':
 	model = BertModel.from_pretrained('bert-large-cased')
 	model.eval()
 
-	##W = load_weight(args.load_weight_path)
-	##W = torch.from_numpy(W).to(device)
+	W = load_weight(args.load_weight_path)
+	W = torch.from_numpy(W).to(device)
 
 	logging.info("Loading Glove Embeddings........")
 	glove_embeddings = load_glove_embeddings(args.glove_embedding_path)
@@ -308,12 +308,12 @@ if __name__ == '__main__':
 			# vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma].reshape(300, 1)).to(device)
 			vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma]).to(device)
 			
-			# ex1_matches = senses_vsm.match_senses(ex1_curr_vector, W, vec_g1, lemma=ex1_curr_lemma, postag=postag, topn=None)
-			# ##ex1_matches = senses_vsm.match_senses(ex1_curr_vector, vec_g1, lemma=ex1_curr_lemma, postag=postag, topn=None)
-			# if len(ex1_matches) == 0:
-			#    continue
+			ex1_matches = senses_vsm.match_senses(ex1_curr_vector, W, vec_g1, lemma=ex1_curr_lemma, postag=postag, topn=None)
+			##ex1_matches = senses_vsm.match_senses(ex1_curr_vector, vec_g1, lemma=ex1_curr_lemma, postag=postag, topn=None)
+			if len(ex1_matches) == 0:
+			   continue
 
-			# ex1_synsets = [(wn_sensekey2synset(sk), score) for sk, score in ex1_matches]
+			ex1_synsets = [(wn_sensekey2synset(sk), score) for sk, score in ex1_matches]
 			
 
 			# example2
@@ -324,20 +324,20 @@ if __name__ == '__main__':
 			# vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma].reshape(300, 1)).to(device)
 			vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma]).to(device)
 			
-			# ex2_matches = senses_vsm.match_senses(ex2_curr_vector, W, vec_g2, lemma=ex2_curr_lemma, postag=postag, topn=None)
-			# ##ex2_matches = senses_vsm.match_senses(ex2_curr_vector, vec_g2, lemma=ex2_curr_lemma, postag=postag, topn=None)
-			# if len(ex2_matches) == 0:
-			#    continue
+			ex2_matches = senses_vsm.match_senses(ex2_curr_vector, W, vec_g2, lemma=ex2_curr_lemma, postag=postag, topn=None)
+			##ex2_matches = senses_vsm.match_senses(ex2_curr_vector, vec_g2, lemma=ex2_curr_lemma, postag=postag, topn=None)
+			if len(ex2_matches) == 0:
+			   continue
 
-			# ex2_synsets = [(wn_sensekey2synset(sk), score) for sk, score in ex2_matches]
+			ex2_synsets = [(wn_sensekey2synset(sk), score) for sk, score in ex2_matches]
 			
 
-			# ex1_best = ex1_synsets[0][0]
-			# ex2_best = ex2_synsets[0][0]
+			ex1_best = ex1_synsets[0][0]
+			ex2_best = ex2_synsets[0][0]
 
 			'''For baseline ***'''
-			ex1_best = ex1_curr_vector
-			ex2_best = ex2_curr_vector
+			# ex1_best = ex1_curr_vector
+			# ex2_best = ex2_curr_vector
 			'''***'''
 			
 			n_instances += 1
@@ -345,22 +345,22 @@ if __name__ == '__main__':
 			pred = False
 
 			'''For baseline ***'''
-			if all(ex1_best == ex2_best):
-				pred = True
+			# if all(ex1_best == ex2_best):
+			# 	pred = True
 
-			else:
-				pred = False
+			# else:
+			# 	pred = False
 			'''***'''
 
 
-			# if len(ex1_synsets) == 1:
-			# 	pred = True
+			if len(ex1_synsets) == 1:
+				pred = True
 
-			# elif ex1_best == ex2_best:
-			# 	pred = True
+			elif ex1_best == ex2_best:
+				pred = True
 
-			# elif ex1_best != ex2_best:
-			# 	pred = False
+			elif ex1_best != ex2_best:
+				pred = False
 
 			if pred:
 				results_f.write('T\n')
