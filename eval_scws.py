@@ -30,11 +30,12 @@ def get_args(
 	parser = argparse.ArgumentParser(description='Evaluation on SCWS dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('-merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False)
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonalI_{}_150.npz'.format(emb_dim))
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_{}_150.npz'.format(emb_dim))
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.768.txt')
+	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.500k.768.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.1024.txt')
-	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonalI_1024_{}_150.npz'.format(emb_dim))
+	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_1024_{}_150.npz'.format(emb_dim))
 	parser.add_argument('--device', default='cuda', type=str)
 	args = parser.parse_args()
 
@@ -133,7 +134,7 @@ def load_glove_embeddings(fn):
 	return embeddings
 
 
-def load_eval_scws_set():
+def load_eval_scws_set(lemmas):
 	instance = []
 	with open('external/SCWS/ratings.txt') as infp:
 		for line in infp:
@@ -201,8 +202,8 @@ if __name__ == '__main__':
 	vectors = []
 	sense2idx = []
 
-	tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
-	model = BertModel.from_pretrained('bert-base-cased')
+	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
+	model = BertModel.from_pretrained('bert-large-cased')
 	model.eval()
 
 	logging.info("Loading Glove Embeddings........")
@@ -226,7 +227,7 @@ if __name__ == '__main__':
 	lemmas = [elem.split('%')[0] for elem in senseKeys]
 
 	logging.info('Formating testing data')
-	eval_instances = load_eval_scws_set()
+	eval_instances = load_eval_scws_set(lemmas)
 	logging.info('Finish formating testing data')
 
 	human_ratings = []
@@ -257,46 +258,106 @@ if __name__ == '__main__':
 				currVec_g1 = torch.from_numpy(glove_embeddings[contEmbed1[0]]).to(device)
 				A_matrix1 = torch.from_numpy(A[sense_id]).to(device)
 				senseVec1 = A_matrix1 * currVec_g1
-				
+
+				'''Compute MaxSimC ***'''
 				##distance1 = ((torch.mm(W, contEmbed1[1]).squeeze(1)) - senseVec1).norm() ** 2
-				##distance1 = (contEmbed1[1] - senseVec1).norm() ** 2 
+				##distance1 = (contEmbed1[1] - senseVec1).norm() ** 2
 
 				'''For diagonal matrices with regulariser'''
-				distance1 = ((torch.mm(W, contEmbed1[1]).squeeze(1)) - senseVec1).norm() ** 2 + (A_matrix1 - vector_ones).norm() ** 2
+				##distance1 = ((torch.mm(W, contEmbed1[1]).squeeze(1)) - senseVec1).norm() ** 2 + (A_matrix1 - vector_ones).norm() ** 2
 				##distance1 = (contEmbed1[1] - senseVec1).norm() ** 2 + (A_matrix1 - vector_ones).norm() ** 2
-				dist2vec1.append((distance1, senseVec1))
+				'''***'''
+
+				'''Compute AvgSimC $$$'''
+				distance1 = ((torch.mm(W, contEmbed1[1]).squeeze(1)) - senseVec1).norm()
+				##distance1 = (contEmbed1[1] - senseVec1).norm() 
+
+				'''For diagonal matrices with regulariser'''
+				##distance1 = ((torch.mm(W, contEmbed1[1]).squeeze(1)) - senseVec1).norm() ** 2 + (A_matrix1 - vector_ones).norm()
+				##distance1 = (contEmbed1[1] - senseVec1).norm() ** 2 + (A_matrix1 - vector_ones).norm()
+				'''$$$'''
+
+				probability1 = torch.sigmoid(-distance1)
+				dist2vec1.append((distance1, senseVec1, probability1))
 
 			if curr_lemma2 == sense_id.split('%')[0]:
 				##currVec_g2 = torch.from_numpy(glove_embeddings[contEmbed2[0]].reshape(300, 1)).to(device)
 				currVec_g2 = torch.from_numpy(glove_embeddings[contEmbed2[0]]).to(device)
 				A_matrix2 = torch.from_numpy(A[sense_id]).to(device)
 				senseVec2 = A_matrix2 * currVec_g2
-				
+
+
+				'''Compute MaxSimC ***'''
 				##distance2 = ((torch.mm(W, contEmbed2[1]).squeeze(1)) - senseVec2).norm() ** 2
 				##distance2 = (contEmbed2[1] - senseVec2).norm() ** 2
 
 				'''For diagonal matrices with regulariser'''
-				distance2 = ((torch.mm(W, contEmbed2[1]).squeeze(1)) - senseVec2).norm() ** 2 + (A_matrix2 - vector_ones).norm() ** 2
+				##distance2 = ((torch.mm(W, contEmbed2[1]).squeeze(1)) - senseVec2).norm() ** 2 + (A_matrix2 - vector_ones).norm() ** 2
 				##distance2 = (contEmbed2[1] - senseVec2).norm() ** 2 + (A_matrix2 - vector_ones).norm() ** 2
-				dist2vec2.append((distance2, senseVec2))
+				'''***'''
 
+				'''Compute AvgSimC $$$'''
+				distance2 = ((torch.mm(W, contEmbed2[1]).squeeze(1)) - senseVec2).norm()
+				##distance2 = (contEmbed2[1] - senseVec2).norm()
 
+				'''For diagonal matrices with regulariser'''
+				##distance2 = ((torch.mm(W, contEmbed2[1]).squeeze(1)) - senseVec2).norm() ** 2 + (A_matrix2 - vector_ones).norm()
+				##distance2 = (contEmbed2[1] - senseVec2).norm() ** 2 + (A_matrix2 - vector_ones).norm()
+				'''$$$'''
+
+				probability2 = torch.sigmoid(-distance2)
+				dist2vec2.append((distance2, senseVec2, probability2))
+
+	
+		'''Compute AvgSimC $$$'''
 		if len(dist2vec1)>0 and len(dist2vec2)>0:
+			AvgSimC = 0
+
 			sort_dist1 = sorted(dist2vec1, key=lambda x: x[0])
 			sort_dist2 = sorted(dist2vec2, key=lambda x: x[0])
 		
-			minDist1 = sort_dist1[0]
-			minDist2 = sort_dist2[0]
+			minDist1 = sort_dist1[0][0]
+			minDist2 = sort_dist2[0][0]
 
-			''' uncomment this when evaluate diagonal matrices '''
-			embed1 = minDist1[1]
-			embed2 = minDist2[1]
+			prob_max1 = torch.sigmoid(-minDist1)
+			prob_max2 = torch.sigmoid(-minDist2)
 
-			cos_sim = torch.dot(embed1, embed2)/(embed1.norm()*embed2.norm())
-			similarities.append(cos_sim.cpu().detach().numpy())
-
+			for i in range(len(dist2vec1)):
+				for j in range(len(dist2vec2)):
+					prob1 = dist2vec1[i][2] / prob_max1
+					prob2 = dist2vec2[j][2] / prob_max2
+					prob1 = prob1.cpu().detach().numpy()
+					prob2 = prob2.cpu().detach().numpy()
+					sense_vec1 = dist2vec1[i][1]
+					sense_vec2 = dist2vec2[j][1]
+					print('distance1: %f, distance2: %f' %(dist2vec1[i][0], dist2vec2[j][0]))
+					print('probability1: %f, probability2: %f' %(prob1, prob2))
+					cos_sim = torch.dot(sense_vec1, sense_vec2) / (sense_vec1.norm() * sense_vec2.norm())
+					cos_sim = cos_sim.cpu().detach().numpy()
+					AvgSimC += prob1 * prob2 * cos_sim
+			similarities.append(AvgSimC)	
 			curr_rating = float(inst[4])
 			human_ratings.append(curr_rating)
+		'''$$$'''
+
+		'''Compute MaxSimC ***'''
+		# if len(dist2vec1)>0 and len(dist2vec2)>0:
+		# 	sort_dist1 = sorted(dist2vec1, key=lambda x: x[0])
+		# 	sort_dist2 = sorted(dist2vec2, key=lambda x: x[0])
+		
+		# 	minDist1 = sort_dist1[0]
+		# 	minDist2 = sort_dist2[0]
+
+		# 	embed1 = minDist1[1]
+		# 	embed2 = minDist2[1]
+
+		# 	cos_sim = torch.dot(embed1, embed2)/(embed1.norm()*embed2.norm())
+		# 	similarities.append(cos_sim.cpu().detach().numpy())
+		
+		# 	curr_rating = float(inst[4])
+		# 	human_ratings.append(curr_rating)
+		'''***'''
+		
 
 	# Compute the Spearman Rank and Pearson Correlation Coefficient against human ratings
 	similarities = np.array(similarities)
