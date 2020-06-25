@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from functools import lru_cache
 import torch.nn as nn
-import torch.nn.functional as F
 # from numpy import dot
 # from numpy.linalg import norm
 from nltk.tokenize import sent_tokenize
@@ -33,7 +32,7 @@ def get_args(
 	parser = argparse.ArgumentParser(description='Evaluation on SCWS dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('-merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False)
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/old/senseMatrix.semcor_diagonalI_{}_50.npz'.format(emb_dim))
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/old/senseMatrix.semcor_diagonal_{}_50.npz'.format(emb_dim))
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.768.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.500k.768.txt')
@@ -306,56 +305,40 @@ if __name__ == '__main__':
 		# print('probability2', probability2)
 
 	
-	# 	'''Compute AvgSimC $$$'''
-	# 	if len(sense_vecors1)>0 and len(sense_vecors2)>0:
-	# 		AvgSimC = 0
-
-	# 		# sort_dist1 = sorted(dist2vec1, key=lambda x: x[0])
-	# 		# sort_dist2 = sorted(dist2vec2, key=lambda x: x[0])
-		
-	# 		# minDist1 = sort_dist1[0][0]
-	# 		# minDist2 = sort_dist2[0][0]
-
-	# 		# prob_max1 = torch.sigmoid(-minDist1)
-	# 		# prob_max2 = torch.sigmoid(-minDist2)
-
-	# 		for i in range(len(sense_vecors1)):
-	# 			for j in range(len(sense_vecors2)):
-	# 				# prob1 = probability1[i] / prob_max1
-	# 				# prob2 = probability2[j] / prob_max2
-	# 				prob1 = probability1[i]
-	# 				prob2 = probability2[j]
-	# 				# prob1 = prob1.cpu().detach().numpy()
-	# 				# prob2 = prob2.cpu().detach().numpy()
-	# 				# sense_vec1 = sense_vecors1[i]
-	# 				# sense_vec2 = sense_vecors2[j]
-	# 				# print('distance1: %f, distance2: %f' %(dist2vec1[i][0], dist2vec2[j][0]))
-	# 				# print('probability1: %f, probability2: %f' %(prob1, prob2))
-	# 				cos_sim = torch.dot(sense_vecors1[i], sense_vecors2[j]) / (sense_vecors1[i].norm() * sense_vecors2[j].norm())
-	# 				# cos_sim = 1-cosine(sense_vec1,sense_vec2)
-	# 				# cos_sim = cos_sim.cpu().detach().numpy()
-	# 				AvgSimC += prob1 * prob2 * cos_sim
-	# 		AvgSimC = AvgSimC.cpu().detach().numpy()
-	# 		similarities.append(AvgSimC)	
-	# 		curr_rating = float(inst[4])
-	# 		human_ratings.append(curr_rating)
-	# 		# print('**************')
-	# print('Finished computing AvgSimC')
-	# '''$$$'''
-
-		'''Compute MaxSimC ***'''
+		'''Compute AvgSimC $$$'''
 		if len(probability1)>0 and len(probability2)>0:
-		
-			i = torch.argmax(probability1)
-			j = torch.argmax(probability2)
+			AvgSimC = 0
 
-			MaxSimC = torch.dot(sense_vecors1[i], sense_vecors2[j]) / (sense_vecors1[i].norm() * sense_vecors2[j].norm())
-			similarities.append(MaxSimC.cpu().detach().numpy())
-		
+			for i in range(len(sense_vecors1)):
+				for j in range(len(sense_vecors2)):
+
+					prob1 = probability1[i]
+					prob2 = probability2[j]
+
+					cos_sim = torch.dot(sense_vecors1[i], sense_vecors2[j]) / (sense_vecors1[i].norm() * sense_vecors2[j].norm())
+					AvgSimC += prob1 * prob2 * cos_sim
+
+			AvgSimC = AvgSimC.cpu().detach().numpy()
+			similarities.append(AvgSimC)	
 			curr_rating = float(inst[4])
 			human_ratings.append(curr_rating)
-	print('Finished computing MaxSimC')
-	'''***'''
+			# print('**************')
+	print('Finished computing AvgSimC')
+	'''$$$'''
+
+	# 	'''Compute MaxSimC ***'''
+	# 	if len(probability1)>0 and len(probability2)>0:
+		
+	# 		i = torch.argmax(probability1)
+	# 		j = torch.argmax(probability2)
+
+	# 		MaxSimC = torch.dot(sense_vecors1[i], sense_vecors2[j]) / (sense_vecors1[i].norm() * sense_vecors2[j].norm())
+	# 		similarities.append(MaxSimC.cpu().detach().numpy())
+		
+	# 		curr_rating = float(inst[4])
+	# 		human_ratings.append(curr_rating)
+	# print('Finished computing MaxSimC')
+	# '''***'''
 		
 
 	# Compute the Spearman Rank and Pearson Correlation Coefficient against human ratings
@@ -371,3 +354,4 @@ if __name__ == '__main__':
 
 	print('Spearman Rank:', spr)
 	print('Pearson Correlation:', pearson)
+
