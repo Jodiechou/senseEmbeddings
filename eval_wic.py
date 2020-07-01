@@ -29,12 +29,15 @@ def get_args(
 			 ):
 
 	parser = argparse.ArgumentParser(description='Evaluation of WiC solution using LMMS for sense comparison.')
+	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('-eval_set', default='dev', help='Evaluation set', required=False, choices=['train', 'dev', 'test'])
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_{}_150.npz'.format(emb_dim))
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_{}_100.npz'.format(emb_dim))
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.768.txt')
+	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.500k.768.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.1024.txt')
-	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_1024_{}_150.npz'.format(emb_dim))
+	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_1024_{}_100.npz'.format(emb_dim))
+	##parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonalI_base_{}_50.npz'.format(emb_dim))
 	parser.add_argument('-device', default='cuda', type=str)
 	args = parser.parse_args()
 
@@ -130,6 +133,7 @@ def get_bert_embedding(sent):
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) 
 			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)
+			##merged_vec = torch.from_numpy(merged_vec.reshape(768, 1)).to(device)
 			##merged_vec = torch.from_numpy(merged_vec).to(device)
 		sent_tokens_vecs.append((token, merged_vec))
 
@@ -231,7 +235,10 @@ class SensesVSM(object):
 		matches = []
 		relevant_sks = []
 		distance = []
-		vector_ones = torch.ones(300, dtype=torch.float32, device=device, requires_grad=False)
+		sense_scores = []
+		##vector_ones = torch.ones(1024, dtype=torch.float32, device=device, requires_grad=False)
+		# vec = vec / vec.norm()
+		# vec_g = vec_g / vec_g.norm()
 	
 		for sk in self.labels:
 			if (lemma is None) or (self.sk_lemmas[sk] == lemma):
@@ -242,17 +249,16 @@ class SensesVSM(object):
 		for idx in relevant_sks_idxs:
 			
 			A_matrix = torch.from_numpy(self.matrix[idx]).to(device)
-			# z = (torch.mm(W, vec) - torch.mm(A_matrix, vec_g)).norm() ** 2
-			z = ((torch.mm(W, vec).squeeze(1)) - A_matrix * vec_g).norm() ** 2
-			##z = ((torch.mm(W, vec).squeeze(1)) - A_matrix * vec_g).norm() ** 2 + (A_matrix - vector_ones).norm() ** 2
-			##z = (vec - A_matrix * vec_g).norm() ** 2
-			##z = (vec - A_matrix * vec_g).norm() ** 2 + (A_matrix - vector_ones).norm() ** 2
 
-			curr_dist = norm(z.item())
-			distance.append(curr_dist)
+			senseVec = A_matrix * vec_g
+			##sim = torch.dot(vec, senseVec) / (vec.norm() * senseVec.norm())
 
-		matches = list(zip(relevant_sks, distance))
-		matches = sorted(matches, key=lambda x: x[1])
+			context_vec = torch.mm(W, vec).squeeze(1)
+			sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
+			sense_scores.append(sim)
+
+		matches = list(zip(relevant_sks, sense_scores))
+		matches = sorted(matches, key=lambda x: x[1], reverse=True)
 		# print('matches', matches)
 		return matches[:topn]
 
@@ -277,7 +283,7 @@ if __name__ == '__main__':
 	vectors = []
 	sense2idx = []
 
-	##senses_vsm = SensesVSM(args.sv_path, normalize=True)
+	senses_vsm = SensesVSM(args.sv_path, normalize=True)
 	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
 	model = BertModel.from_pretrained('bert-large-cased')
 	model.eval()
@@ -319,7 +325,7 @@ if __name__ == '__main__':
 			# example2
 			ex2_curr_word, ex2_curr_vector = bert_ex2[idx2]
 			ex2_curr_lemma = wn_lemmatize(word, postag)
-			if ex1_curr_lemma not in glove_embeddings:
+			if ex2_curr_lemma not in glove_embeddings:
 				continue
 			# vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma].reshape(300, 1)).to(device)
 			vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma]).to(device)
