@@ -183,17 +183,6 @@ def get_bert_embedding(sent):
 	return sent_tokens_vecs
 
 
-# def adjust_learning_rate(optimizer, arg.num_epochs):
-# 	"""Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-# 	min_lr = 1e-5
-# 	# lr = args.lr * (0.1 ** (epoch // 30))
-# 	decay_lr = (args.lr - min_lr) / arg.num_epochs
-# 	update_lr = lr - decay_lr
-# 	for param_group in optimizer.param_groups:
-# 		param_group['lr'] = update_lr
-
-
-
 if __name__ == '__main__':
 
 	args = get_args()
@@ -240,10 +229,7 @@ if __name__ == '__main__':
 	index = int(instances_len*0.8)
 	train_set = instances[:index]
 	valid_set = instances[index:]
-	# print('train_set', len(train_set))
-	# print('val_set', len(val_set))
 	
-
 
 	"""
 	build sense2idx dictionary
@@ -298,10 +284,7 @@ if __name__ == '__main__':
 		count = 0
 		valid_count = 0
 		valid_cum_loss = 0
-
-		# if epoch > 0:
-		# 	adjust_learning_rate(optimizer,epoch)
-
+		
 		for batch_idx, batch in enumerate(chunks(train_set, args.batch_size)):
 
 			"""
@@ -346,11 +329,10 @@ if __name__ == '__main__':
 
 						context_vec = torch.mm(W[0], vec_c).squeeze(1)
 						sense_vec = A[index] * vec_g
-						# sense_vec = torch.relu(torch.pow(sense_vec, 2))
 						sense_vec = torch.relu(sense_vec)
 						
 						loss += (context_vec - sense_vec).norm() ** 2
-						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no weights
+						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no W
 						
 						"""set the A matrices that are in a current batch to require gradient"""
 						# optimizer.param_groups[0]['params'][1+index].requires_grad = True
@@ -397,7 +379,7 @@ if __name__ == '__main__':
 						valid_vec_c = torch.mean(torch.stack([valid_sent_bert[i][1] for i in valid_tok_idxs]), dim=0)
 
 						valid_loss += ((torch.mm(W[0], valid_vec_c).squeeze(1)) - A[index] * valid_vec_g).norm() ** 2
-						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no weights
+						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no W
 						
 						
 
@@ -435,33 +417,3 @@ if __name__ == '__main__':
 	logging.info('number of out of vocab word: %d' % out_of_vocab_num)
 	logging.info('Written %s' % save_sense_matrix_path)	
 	logging.info('Written %s' % save_weight_path)
-
-
-
-
-
-		
-
-
-	# """save the trained parameters W and A matrices"""
-	# weight = W[0].cpu().detach().numpy()
-	# matrix_A = [A[i].cpu().detach().numpy() for i in range(num_senses)]
-
-
-	# logging.info('number of out of vocab word: %d' %(out_of_vocab_num))
-	# print('shape of each matrix A:', matrix_A[0].shape)
-	# print('shape of weight matrix w:', weight.shape)	
-
-	# """build the structures of W and A matrices"""
-	# for n in range(len(sense2idx)):
-	# 	sense_matrix[list(sense2idx.keys())[n]] = matrix_A[n]
-
-	# logging.info("Total number of senses %d " %(len(sense_matrix)))
-
-	# #write_to_file(args.sense_matrix_path, sense_matrix)
-
-	# np.savez(args.save_sense_matrix_path, sense_matrix)
-	# logging.info('Written %s' % args.save_sense_matrix_path)
-
-	# np.savez(args.save_weight_path, weight)
-	# logging.info('Written %s' % args.save_weight_path)
