@@ -31,13 +31,13 @@ def get_args(
 	parser = argparse.ArgumentParser(description='Evaluation of WiC solution using LMMS for sense comparison.')
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('-eval_set', default='dev', help='Evaluation set', required=False, choices=['train', 'dev', 'test'])
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_{}_100.npz'.format(emb_dim))
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_{}_50.npz'.format(emb_dim))
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.768.txt')
 	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.500k.768.txt')
-	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.1024.txt')
-	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_1024_{}_100.npz'.format(emb_dim))
-	##parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonalI_base_{}_50.npz'.format(emb_dim))
+	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.500k.1024.txt')
+	parser.add_argument('--load_weight_path', default='data/vecotrs/weight.semcor_diagonal_1024_{}_50.npz'.format(emb_dim))
+	##parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_base_{}_50.npz'.format(emb_dim))
 	parser.add_argument('-device', default='cuda', type=str)
 	args = parser.parse_args()
 
@@ -194,16 +194,15 @@ class SensesVSM(object):
 
 
 	def load_npz(self, path):
+		self.matrices = []
 		logging.info("Loading Pre-trained Sense Matrices ...")
-		loader = np.load(path, allow_pickle=True)    # A is loaded a 0d array
-		loader = np.atleast_1d(loader.f.arr_0)       # convert it to a 1d array with 1 element
-		A = loader[0]								 # a dictionary, key is sense id and value is sense matrix 
-		self.labels = list(A.keys())
-		self.matrix = list(A.values())
-		self.matrix = np.array(self.matrix)
+		loader = np.load(path, allow_pickle=True)	# A is loaded a 0d array
+		loader = np.atleast_1d(loader.f.arr_0)		# convert it to a 1d array with 1 element
+		self.A = loader[0]				# a dictionary, key is sense id and value is sense matrix 
+		self.labels = list(self.A.keys())
 		self.labels_set = set(self.labels)
 		self.indices = {l: i for i, l in enumerate(self.labels)}
-		logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(A))
+		logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(self.A))
 
 
 	def load_aux_senses(self):
@@ -226,9 +225,6 @@ class SensesVSM(object):
 		norms = np.linalg.norm(self.vectors, axis=1)
 		self.vectors = (self.vectors.T / norms).T
 	'''
-	# def get_vec(self, label):
-	# 	return self.vectors[self.indices[label]]
-
 
 	def match_senses(self, vec, W, vec_g, lemma=None, postag=None, topn=100):
 	##def match_senses(self, vec, vec_g, lemma=None, postag=None, topn=100):
@@ -236,31 +232,36 @@ class SensesVSM(object):
 		relevant_sks = []
 		distance = []
 		sense_scores = []
-		##vector_ones = torch.ones(1024, dtype=torch.float32, device=device, requires_grad=False)
-		# vec = vec / vec.norm()
-		# vec_g = vec_g / vec_g.norm()
-	
+		
 		for sk in self.labels:
 			if (lemma is None) or (self.sk_lemmas[sk] == lemma):
 				if (postag is None) or (self.sk_postags[sk] == postag):
 					relevant_sks.append(sk)
-		relevant_sks_idxs = [self.indices[sk] for sk in relevant_sks]
-		
-		for idx in relevant_sks_idxs:
-			
-			A_matrix = torch.from_numpy(self.matrix[idx]).to(device)
-
-			senseVec = A_matrix * vec_g
-			##sim = torch.dot(vec, senseVec) / (vec.norm() * senseVec.norm())
-
-			context_vec = torch.mm(W, vec).squeeze(1)
-			sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
-			sense_scores.append(sim)
+					
+					A_matrix = torch.from_numpy(self.A[sk]).to(device)
+					senseVec = A_matrix * vec_g
+					##senseVec = torch.mm(A_matrix, vec_g).squeeze(1)
+					context_vec = vec
+					context_vec = torch.mm(W, vec).squeeze(1)
+					sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
+					sense_scores.append(sim)
 
 		matches = list(zip(relevant_sks, sense_scores))
 		matches = sorted(matches, key=lambda x: x[1], reverse=True)
 		# print('matches', matches)
 		return matches[:topn]
+
+		# sense_scores = torch.tensor(sense_scores)
+		# if len(sense_scores)>0:
+		# 	i = torch.argmax(sense_scores)
+		# 	matches.append((relevant_sks[i], sense_scores[i]))
+
+		# print('relevant_sks', relevant_sks)
+		# print('sense_scores', sense_scores)
+		# print('matches', matches)
+
+		# return matches
+
 
 if __name__ == '__main__':
 
@@ -311,7 +312,7 @@ if __name__ == '__main__':
 			ex1_curr_lemma = wn_lemmatize(word, postag)
 			if ex1_curr_lemma not in glove_embeddings:
 				continue
-			# vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma].reshape(300, 1)).to(device)
+			##vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma].reshape(300, 1)).to(device)
 			vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma]).to(device)
 			
 			ex1_matches = senses_vsm.match_senses(ex1_curr_vector, W, vec_g1, lemma=ex1_curr_lemma, postag=postag, topn=None)
@@ -319,7 +320,7 @@ if __name__ == '__main__':
 			if len(ex1_matches) == 0:
 			   continue
 
-			ex1_synsets = [(wn_sensekey2synset(sk), score) for sk, score in ex1_matches]
+			ex1_match_senses = [(wn_sensekey2synset(sk), score) for sk, score in ex1_matches]
 			
 
 			# example2
@@ -327,7 +328,7 @@ if __name__ == '__main__':
 			ex2_curr_lemma = wn_lemmatize(word, postag)
 			if ex2_curr_lemma not in glove_embeddings:
 				continue
-			# vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma].reshape(300, 1)).to(device)
+			##vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma].reshape(300, 1)).to(device)
 			vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma]).to(device)
 			
 			ex2_matches = senses_vsm.match_senses(ex2_curr_vector, W, vec_g2, lemma=ex2_curr_lemma, postag=postag, topn=None)
@@ -335,31 +336,31 @@ if __name__ == '__main__':
 			if len(ex2_matches) == 0:
 			   continue
 
-			ex2_synsets = [(wn_sensekey2synset(sk), score) for sk, score in ex2_matches]
+			ex2_match_senses = [(wn_sensekey2synset(sk), score) for sk, score in ex2_matches]
 			
 
-			ex1_best = ex1_synsets[0][0]
-			ex2_best = ex2_synsets[0][0]
+			ex1_best = ex1_match_senses[0][0]
+			ex2_best = ex2_match_senses[0][0]
 
-			'''For baseline ***'''
-			# ex1_best = ex1_curr_vector
-			# ex2_best = ex2_curr_vector
-			'''***'''
+			# '''For baseline ***'''
+			# ex1_best = vec_g1
+			# ex2_best = vec_g2
+			# '''***'''
 			
 			n_instances += 1
 
 			pred = False
 
-			'''For baseline ***'''
+			# '''For baseline ***'''
 			# if all(ex1_best == ex2_best):
 			# 	pred = True
 
 			# else:
 			# 	pred = False
-			'''***'''
+			# '''***'''
 
 
-			if len(ex1_synsets) == 1:
+			if len(ex1_match_senses) == 1:
 				pred = True
 
 			elif ex1_best == ex2_best:
