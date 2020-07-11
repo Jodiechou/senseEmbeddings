@@ -1,6 +1,7 @@
 import numpy as np 
 import torch.optim as optim
 import torch
+import torch.nn as nn
 import random
 
 import logging
@@ -86,6 +87,23 @@ def read_xml_sents(xml_path):
 				yield lxml.etree.fromstring(''.join(sent_elems))
 
 
+def load_senseMatrices_npz(path):
+	logging.info("Loading Pre-trained Sense Matrices ...")
+	A = np.load(path, allow_pickle=True)	# A is loaded a 0d array
+	A = np.atleast_1d(A.f.arr_0)			# convert it to a 1d array with 1 element
+	A = A[0]								# a dictionary, key is sense id and value is sense matrix 
+	logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(A))
+	return A
+
+
+def load_weight(path):
+	logging.info("Loading Model Parameters W ...")
+	weight = np.load(path)
+	weight = weight.f.arr_0
+	logging.info('Loaded Model Parameters W')
+	return weight
+
+
 def write_to_file(path, mat):
 	with open(path, 'w') as f:
 		for sen_str, matrix in mat.items():
@@ -109,11 +127,7 @@ def get_args(
 			 ):
 
 	parser = argparse.ArgumentParser(description='Word Sense Mapping')
-	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.500k.768.txt')
-	##parser.add_argument('--glove_embedding_path', default='external/glove/glove.1024.txt')
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('--save_sense_matrix_path', default='data/vectors/senseMatrix.semcor_diagonal_relu_{}.npz'.format(emb_dim))
-	parser.add_argument('--save_weight_path', default='data/vectors/weight.semcor_diagonal_relu_1024_{}.npz'.format(emb_dim))
 	parser.add_argument('--num_epochs', default=num_epochs, type=int)
 	parser.add_argument('--loss', default='standard', type=str, choices=['standard'])
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
@@ -142,6 +156,7 @@ def load_glove_embeddings(fn):
 			splitLine = line.split(' ')
 			word = splitLine[0]
 			vec = np.array(splitLine[1:], dtype='float32')
+			vec = torch.from_numpy(vec)
 			embeddings[word] = vec
 	return embeddings
 
@@ -178,7 +193,6 @@ def get_bert_embedding(sent):
 				merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)
 			elif args.bert == 'base':
 				merged_vec = torch.from_numpy(merged_vec.reshape(768, 1)).to(device)
-			##merged_vec = torch.from_numpy(merged_vec).to(device)
 		sent_tokens_vecs.append((token, merged_vec))
 	return sent_tokens_vecs
 
@@ -206,13 +220,13 @@ if __name__ == '__main__':
 	if args.bert == 'large':
 		tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
 		model = BertModel.from_pretrained('bert-large-cased')
-		save_sense_matrix_path = 'data/vectors/senseMatrix.semcor_diagonal_valid_{}.npz'.format(args.emb_dim)
-		save_weight_path = 'data/vectors/weight.semcor_diagonal_valid_1024_{}.npz'.format(args.emb_dim)
+		save_sense_matrix_path = 'data/vectors/senseMatrix.semcor_diagonal_relu_large_{}_50.npz'.format(args.emb_dim)
+		save_weight_path = 'data/vectors/weight.semcor_diagonal_relu_1024_{}_50.npz'.format(args.emb_dim)
 	elif args.bert == 'base':
 		tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 		model = BertModel.from_pretrained('bert-base-cased')
-		save_sense_matrix_path = 'data/vectors/senseMatrix.semcor_diagonal_valid_base_{}.npz'.format(args.emb_dim)
-		save_weight_path = 'data/vectors/weight.semcor_diagonal_valid_base_768_{}.npz'.format(args.emb_dim)
+		save_sense_matrix_path = 'data/vectors/senseMatrix.semcor_diagonal_relu_base_{}_50.npz'.format(args.emb_dim)
+		save_weight_path = 'data/vectors/weight.semcor_diagonal_relu_768_{}_50.npz'.format(args.emb_dim)
 
 	model.eval()
 	
@@ -229,6 +243,8 @@ if __name__ == '__main__':
 	index = int(instances_len*0.8)
 	train_set = instances[:index]
 	valid_set = instances[index:]
+	# print('train_set', len(train_set))
+	# print('val_set', len(val_set))
 	
 
 	"""
@@ -236,9 +252,8 @@ if __name__ == '__main__':
 	use dictionary to filter sense with the same id
 	"""
 	logging.info("Loading Glove Embeddings........")
-	glove_embeddings_full = load_glove_embeddings(args.glove_embedding_path)
+	glove_embeddings = load_glove_embeddings(args.glove_embedding_path)
 
-	glove_embeddings = {}
 	for sent_instance in instances:
 		for i in range(len(sent_instance['senses'])):
 			if sent_instance['senses'][i] is None:
@@ -249,12 +264,6 @@ if __name__ == '__main__':
 				if sense in sense2idx:
 					continue
 
-				word = sense.split('%')[0]
-				if word not in glove_embeddings_full.keys():
-					out_of_vocab_num += 1
-					continue
-
-				glove_embeddings[word] = torch.from_numpy(glove_embeddings_full[word]).to(device)
 				sense2idx[sense] = idx
 				idx += 1
 
@@ -270,12 +279,12 @@ if __name__ == '__main__':
 	elif args.bert == 'base':
 		W = [torch.randn(args.emb_dim, 768, dtype=torch.float32, device=device, requires_grad=True)]
 
-
 	optimizer = optim.Adam(W+A, lr=args.lr)
-	##optimizer = optim.Adam(A, lr=args.lr)
+	# ##optimizer = optim.Adam(A, lr=args.lr)
+
+	active = nn.ReLU(inplace=True)
 
 	
-
 	logging.info("------------------Training-------------------")
 
 	for epoch in range(args.num_epochs):
@@ -284,7 +293,10 @@ if __name__ == '__main__':
 		count = 0
 		valid_count = 0
 		valid_cum_loss = 0
-		
+
+		# if epoch > 0:
+		# 	adjust_learning_rate(optimizer,epoch)
+
 		for batch_idx, batch in enumerate(chunks(train_set, args.batch_size)):
 
 			"""
@@ -317,8 +329,7 @@ if __name__ == '__main__':
 							continue
 
 						index = sense2idx[sense]
-						word = sense.split('%')[0]
-						vec_g = glove_embeddings[word]
+						multi_words = []
 
 						"""
 						for the case of taking multiple words as a instance
@@ -327,12 +338,22 @@ if __name__ == '__main__':
 						"""
 						vec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)
 
+						for j in tok_idxs:
+							token_word = sent_info['tokens'][j]
+							
+							if token_word in glove_embeddings.keys():
+								multi_words.append(token_word)
+								
+						if len(multi_words) == 0:
+							out_of_vocab_num += 1
+							continue
+
+						vec_g = torch.mean(torch.stack([glove_embeddings[w] for w in multi_words]), dim=0).to(device)
+
 						context_vec = torch.mm(W[0], vec_c).squeeze(1)
 						sense_vec = A[index] * vec_g
-						sense_vec = torch.relu(sense_vec)
-						
+						sense_vec = active(sense_vec)
 						loss += (context_vec - sense_vec).norm() ** 2
-						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no W
 						
 						"""set the A matrices that are in a current batch to require gradient"""
 						# optimizer.param_groups[0]['params'][1+index].requires_grad = True
@@ -368,8 +389,7 @@ if __name__ == '__main__':
 							continue
 
 						valid_index = sense2idx[valid_sense]
-						valid_word = valid_sense.split('%')[0]
-						valid_vec_g = glove_embeddings[valid_word]
+						valid_multi_words = []
 						
 						"""
 						for the case of taking multiple words as a instance
@@ -378,10 +398,23 @@ if __name__ == '__main__':
 						"""
 						valid_vec_c = torch.mean(torch.stack([valid_sent_bert[i][1] for i in valid_tok_idxs]), dim=0)
 
-						valid_loss += ((torch.mm(W[0], valid_vec_c).squeeze(1)) - A[index] * valid_vec_g).norm() ** 2
-						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no W
-						
-						
+						for k in valid_tok_idxs:
+							valid_token_word = valid_sent_info['tokens'][k]
+							
+							if valid_token_word in glove_embeddings.keys():
+								valid_multi_words.append(valid_token_word)
+
+						if len(valid_multi_words) == 0:	
+							out_of_vocab_num += 1
+							continue
+							
+						valid_vec_g = torch.mean(torch.stack([glove_embeddings[w] for w in valid_multi_words]), dim=0).to(device)
+
+						valid_context_vec = torch.mm(W[0], valid_vec_c).squeeze(1)
+						valid_sense_vec = A[valid_index] * valid_vec_g
+
+						valid_sense_vec = active(valid_sense_vec)
+						valid_loss += (valid_context_vec - valid_sense_vec).norm() ** 2
 
 			valid_cum_loss += valid_loss.item()
 		valid_cum_loss /= valid_count
@@ -417,3 +450,7 @@ if __name__ == '__main__':
 	logging.info('number of out of vocab word: %d' % out_of_vocab_num)
 	logging.info('Written %s' % save_sense_matrix_path)	
 	logging.info('Written %s' % save_weight_path)
+
+
+
+
