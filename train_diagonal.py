@@ -119,8 +119,6 @@ def save_pickle_dict(path, mat):
 def get_args(
 		num_epochs = 50,
 		emb_dim = 300,
-		##emb_dim = 768,
-		##emb_dim = 1024,
 		batch_size = 64,
 		diag = False,
 		lr = 1e-4
@@ -215,7 +213,7 @@ if __name__ == '__main__':
 	device = torch.device(args.device)
 
 	sense2idx, sense_matrix = {}, {}
-	idx, index, out_of_vocab_num = 0, 0, 0
+	idx, index = 0, 0
 
 	if args.bert == 'large':
 		tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
@@ -243,8 +241,6 @@ if __name__ == '__main__':
 	index = int(instances_len*0.8)
 	train_set = instances[:index]
 	valid_set = instances[index:]
-	# print('train_set', len(train_set))
-	# print('val_set', len(val_set))
 	
 
 	"""
@@ -345,7 +341,6 @@ if __name__ == '__main__':
 								multi_words.append(token_word)
 								
 						if len(multi_words) == 0:
-							out_of_vocab_num += 1
 							continue
 
 						vec_g = torch.mean(torch.stack([glove_embeddings[w] for w in multi_words]), dim=0).to(device)
@@ -405,7 +400,6 @@ if __name__ == '__main__':
 								valid_multi_words.append(valid_token_word)
 
 						if len(valid_multi_words) == 0:	
-							out_of_vocab_num += 1
 							continue
 							
 						valid_vec_g = torch.mean(torch.stack([glove_embeddings[w] for w in valid_multi_words]), dim=0).to(device)
@@ -447,7 +441,6 @@ if __name__ == '__main__':
 	print('shape of each matrix A:', matrix_A[0].shape)
 	print('shape of weight matrix w:', weight.shape)
 	logging.info('Total number of senses: %d ' % len(sense_matrix))
-	logging.info('number of out of vocab word: %d' % out_of_vocab_num)
 	logging.info('Written %s' % save_sense_matrix_path)	
 	logging.info('Written %s' % save_weight_path)
 
