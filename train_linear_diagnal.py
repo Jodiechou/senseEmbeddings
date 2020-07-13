@@ -197,7 +197,7 @@ if __name__ == '__main__':
 	device = torch.device(args.device)
 
 	sense2idx, sense_matrix = {}, {}
-	idx, index, out_of_vocab_num = 0, 0, 0
+	idx, index = 0, 0
 
 	if args.bert == 'large':
 		tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
@@ -333,22 +333,17 @@ if __name__ == '__main__':
 
 						for j in tok_idxs:
 							token_word = sent_info['tokens'][j]
-							# print('token_word---before', token_word)
 							
 							if token_word in glove_embeddings.keys():
 								multi_words.append(token_word)
-								# print('token_word', token_word)
-							
-						# print('multi_words', multi_words)
 
 						if len(multi_words) == 0:
-							out_of_vocab_num += 1
 							continue
 
 						vec_g = torch.mean(torch.stack([glove_embeddings[w] for w in multi_words]), dim=0).to(device)
 						
 						loss += ((torch.mm(W[0], vec_c).squeeze(1)) - A[index] * vec_g).norm() ** 2
-						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no weights
+						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no W
 						
 						"""set the A matrices that are in a current batch to require gradient"""
 						# optimizer.param_groups[0]['params'][1+index].requires_grad = True
@@ -400,13 +395,12 @@ if __name__ == '__main__':
 								valid_multi_words.append(valid_token_word)
 
 						if len(valid_multi_words) == 0:	
-							out_of_vocab_num += 1
 							continue
 							
 						valid_vec_g = torch.mean(torch.stack([glove_embeddings[w] for w in valid_multi_words]), dim=0).to(device)
 
 						valid_loss += ((torch.mm(W[0], valid_vec_c).squeeze(1)) - A[valid_index] * valid_vec_g).norm() ** 2
-						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no weights
+						##loss += (vec_c - A[index] * vec_g).norm() ** 2  ### no W
 						
 			valid_cum_loss += valid_loss.item()
 		valid_cum_loss /= valid_count
@@ -439,7 +433,6 @@ if __name__ == '__main__':
 	print('shape of each matrix A:', matrix_A[0].shape)
 	print('shape of weight matrix w:', weight.shape)
 	logging.info('Total number of senses: %d ' % len(sense_matrix))
-	logging.info('number of out of vocab word: %d' % out_of_vocab_num)
 	logging.info('Written %s' % save_sense_matrix_path)	
 	logging.info('Written %s' % save_weight_path)
 
