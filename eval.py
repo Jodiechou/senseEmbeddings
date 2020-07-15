@@ -14,7 +14,7 @@ from transformers import BertTokenizer, BertModel, BertForMaskedLM
 from nltk.corpus import wordnet as wn
 import re
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
@@ -27,9 +27,9 @@ def get_args(
 			 ):
 
 	parser = argparse.ArgumentParser(description='WSD Evaluation.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('-sv_path', help='Path to sense matrices', required=True)
-	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_1024_{}.npz'.format(emb_dim))
+	parser.add_argument('-glove_embedding_path', default='external/glove/glove.840B.300d.txt')
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_linear_large_{}_150.npz'.format(emb_dim))
+	parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_linear_1024_{}_150.npz'.format(emb_dim))
 	parser.add_argument('-wsd_fw_path', help='Path to WSD Evaluation Framework', required=False,
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('-test_set', default='ALL', help='Name of test set', required=False,
@@ -41,7 +41,7 @@ def get_args(
 	parser.add_argument('-thresh', type=float, default=-1, help='Similarity threshold', required=False)
 	parser.add_argument('-k', type=int, default=1, help='Number of Neighbors to accept', required=False)
 	parser.add_argument('-quiet', dest='debug', action='store_false', help='Less verbose (debug=False)', required=False)
-	parser.add_argument('--device', default='cuda', type=str)
+	parser.add_argument('-device', default='cuda', type=str)
 	# parser.set_defaults(use_lemma=True)
 	parser.set_defaults(use_pos=True)
 	parser.set_defaults(debug=True)
@@ -156,6 +156,7 @@ def get_sk_pos(sk, tagtype='long'):
 		type2pos = {1: 'n', 2: 'v', 3: 's', 4: 'r', 5: 's'}
 		return type2pos[get_sk_type(sk)]
 
+	
 def get_sk_type(sensekey):
 	return int(sensekey.split('%')[1].split(':')[0])
 
@@ -184,6 +185,7 @@ def get_bert_embedding(sent):
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) 
 			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)
+			##merged_vec = torch.from_numpy(merged_vec.reshape(768, 1)).to(device)
 		sent_tokens_vecs.append((token, merged_vec))
 
 	return sent_tokens_vecs
@@ -197,6 +199,7 @@ def load_glove_embeddings(fn):
 			splitLine = line.split(' ')
 			word = splitLine[0]
 			vec = np.array(splitLine[1:], dtype='float32')
+			vec = torch.from_numpy(vec)
 			embeddings[word] = vec
 	return embeddings
 
@@ -232,7 +235,6 @@ if __name__ == '__main__':
 	W = load_weight(args.load_weight_path)
 	W = torch.from_numpy(W).to(device)
 	
-
 	senseKeys = list(A.keys())
 	matrices = list(A.values())
 	lemmas = [elem.split('%')[0] for elem in senseKeys]
@@ -280,31 +282,59 @@ if __name__ == '__main__':
 					if curr_id is None:
 						continue
 			
+					# curr_lemma = sent_info['lemmas'][mw_idx]
+					# if curr_lemma not in lemmas:
+					# 	continue  # skips hurt performance in official scorer
+
+					# curr_postag = sent_info['pos'][mw_idx]
+					# curr_tokens = [sent_info['tokens'][i] for i in tok_idxs]
+					# if curr_lemma not in glove_embeddings.keys():
+					# 	continue
+					# # currVec_g = torch.from_numpy(glove_embeddings[curr_lemma].reshape(300, 1)).to(device)
+					# currVec_g = torch.from_numpy(glove_embeddings[curr_lemma]).to(device)
+					# currVec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)		
+
 					curr_lemma = sent_info['lemmas'][mw_idx]
 					if curr_lemma not in lemmas:
 						continue  # skips hurt performance in official scorer
-
 					curr_postag = sent_info['pos'][mw_idx]
 					curr_tokens = [sent_info['tokens'][i] for i in tok_idxs]
-					if curr_lemma not in glove_embeddings.keys():
-						continue
-					currVec_g = torch.from_numpy(glove_embeddings[curr_lemma].reshape(300, 1)).to(device)
-					currVec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)				
+					multi_words = []
 
-					disSims = []
+					"""
+					for the case of taking multiple words as a instance
+					for example, obtaining the embedding for 'too much' instead of two embeddings for 'too' and 'much'
+					we use mean to compute the averaged vec for a multiple words expression
+					"""
+					currVec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0).to(device)
+
+					for j in tok_idxs:
+						token_word = sent_info['tokens'][j]
+						
+						if token_word in glove_embeddings.keys():
+							multi_words.append(token_word)
+
+					if len(multi_words) == 0:
+						continue
+
+					currVec_g = torch.mean(torch.stack([glove_embeddings[w] for w in multi_words]), dim=0).to(device)		
+
+					sense_scores = []
 
 					for sense_id in senseKeys:
 						"""check if curr_lemma is in both pre-trained sense matrices and current dataset"""
 						if curr_lemma == sense_id.split('%')[0]: 
 							A_matrix = torch.from_numpy(A[sense_id]).to(device)
-							z = (torch.mm(W, currVec_c) - torch.mm(A_matrix, currVec_g)).norm() ** 2
-							disSims.append((z.item(), sense_id))
+							senseVec = A_matrix * currVec_g
+							context_vec = torch.mm(W, currVec_c).squeeze(1)
+							sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
+							sense_scores.append((sim.item(), sense_id))
+							
 						
 					"""take the neareast neighbour as the predicted sense"""
-					disSims = sorted(disSims, key=lambda x: x[0])
-					# print('disSims', disSims)
-					minDissim = disSims[0]
-					predict = minDissim[1]
+					sense_scores = sorted(sense_scores, key=lambda x: x[0], reverse=True)
+					max_sim = sense_scores[0]
+					predict = max_sim[1]
 					
 					results_f.write('%s %s\n' % (curr_id, predict))
 
@@ -312,10 +342,7 @@ if __name__ == '__main__':
 					n_instances += 1
 					wsd_correct = False
 					gold_sensekeys = id2senses[curr_id]
-					# print('gold_sensekeys', gold_sensekeys[0])
-					# print('predict', predict)
 
-					#if len(set(predict).intersection(set(gold_sensekeys[0]))) > 0:
 					if gold_sensekeys[0] == predict:
 						n_correct += 1
 						wsd_correct = True
