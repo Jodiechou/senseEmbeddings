@@ -36,10 +36,10 @@ def get_args(
 	parser = argparse.ArgumentParser(description='Evaluation of WiC solution using LMMS for sense comparison.')
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('-eval_set', default='train', help='Evaluation set', required=False, choices=['train', 'dev', 'test'])
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_linear_large_{}_350.npz'.format(emb_dim))
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_gelu_large_{}_50.npz'.format(emb_dim))
 	parser.add_argument('--glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('-out_path', help='Path to .pkl classifier generated', default='data/models/wic_lr.pkl', required=False)
-	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_linear_1024_{}_350.npz'.format(emb_dim))
+	parser.add_argument('-out_path', help='Path to .pkl classifier generated', default='data/models/wic_ac_gelu50.pkl', required=False)
+	parser.add_argument('--load_weight_path', default='data/vectors/weight.semcor_diagonal_gelu_1024_{}_50.npz'.format(emb_dim))
 	parser.add_argument('-device', default='cuda', type=str)
 	args = parser.parse_args()
 
@@ -122,7 +122,7 @@ def get_bert_embedding(sent):
 	model.to(device)
 	with torch.no_grad():
 		outputs = model(tokens_tensor, token_type_ids=segments_tensors)
-	res = list(zip(tokenized_text[1:-1], outputs[0].cpu().detach().numpy()[0][1:-1])) ## [1:-1] is used to get rid of CLS] and [SEP]
+	res = list(zip(tokenized_text[1:-1], outputs[0][0][1:-1].cpu().detach().numpy())) ## [1:-1] is used to get rid of CLS] and [SEP]
 	
 	## merge subtokens
 	sent_tokens_vecs = []
@@ -233,6 +233,14 @@ class SensesVSM(object):
 		return self.A[label]	## For npz file
 
 
+	# def lemma2sense_id(self):
+	# 	self.inst = defaultdict(list)
+	# 	for sk in self.labels:
+	# 		lemself.sk_lemmas[sk]
+	# 		self.inst[sk].append()
+
+
+
 	def match_senses(self, vec, W, vec_g, lemma=None, postag=None, topn=100):
 	##def match_senses(self, vec, vec_g, lemma=None, postag=None, topn=100):
 		matches = []
@@ -240,11 +248,10 @@ class SensesVSM(object):
 		distance = []
 		sense_scores = []
 		
-		for sk in self.labels:
-			if (lemma is None) or (self.sk_lemmas[sk] == lemma):
-				if (postag is None) or (self.sk_postags[sk] == postag):
+		if (lemma is None) or (lemma in self.known_lemmas):
+			# if (postag is None) or (postag in self.sks_by_pos[self.sk_postags[s]] for s in self.lemma_sks[lemma]):
+				for sk in self.lemma_sks[lemma]:
 					relevant_sks.append(sk)
-					
 					A_matrix = torch.from_numpy(self.A[sk]).to(device)
 					senseVec = A_matrix * vec_g
 					##senseVec = torch.mm(A_matrix, vec_g).squeeze(1)
@@ -252,22 +259,69 @@ class SensesVSM(object):
 					context_vec = torch.mm(W, vec).squeeze(1)
 					sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
 					sense_scores.append(sim)
+			# else:
+			# 	print('postag is not matched, lemma:{}, postag:{}'.fotmat(lemma, postag))
+			# 	for unk_sk in self.labels:
+			# 		relevant_sks.append(unk_sk)
+			# 		unk_A_matrix = torch.from_numpy(self.A[unk_sk]).to(device)
+			# 		unk_senseVec = unk_A_matrix * vec_g
+			# 		unk_context_vec = torch.mm(W, vec).squeeze(1)
+			# 		unk_sim = torch.dot(unk_context_vec, unk_senseVec) / (unk_context_vec.norm() * unk_senseVec.norm())
+			# 		sense_scores.append(unk_sim)
+
+		else:		## For the lemma that is not related to any sense_id
+			print('lemma not related to any sense_id:', lemma)
+			## return [None, 0.0]
+			for unk_sk in self.labels:
+				relevant_sks.append(unk_sk)
+				unk_A_matrix = torch.from_numpy(self.A[unk_sk]).to(device)
+				unk_senseVec = unk_A_matrix * vec_g
+				unk_context_vec = torch.mm(W, vec).squeeze(1)
+				unk_sim = torch.dot(unk_context_vec, unk_senseVec) / (unk_context_vec.norm() * unk_senseVec.norm())
+				sense_scores.append(unk_sim)
+
+
 
 		matches = list(zip(relevant_sks, sense_scores))
 		matches = sorted(matches, key=lambda x: x[1], reverse=True)
 		# print('matches', matches)
 		return matches[:topn]
 
-		# sense_scores = torch.tensor(sense_scores)
-		# if len(sense_scores)>0:
-		# 	i = torch.argmax(sense_scores)
-		# 	matches.append((relevant_sks[i], sense_scores[i]))
+	# def match_senses(self, vec, W, vec_g, lemma=None, postag=None, topn=100):
+	# ##def match_senses(self, vec, vec_g, lemma=None, postag=None, topn=100):
+	# 	matches = []
+	# 	relevant_sks = []
+	# 	distance = []
+	# 	sense_scores = []
+		
+	# for sk in self.labels:
+		# 	if (lemma is None) or (self.sk_lemmas[sk] == lemma):
+		# 		if (postag is None) or (self.sk_postags[sk] == postag):
+		# 			relevant_sks.append(sk)
+					
+		# 			A_matrix = torch.from_numpy(self.A[sk]).to(device)
+		# 			senseVec = A_matrix * vec_g
+		# 			##senseVec = torch.mm(A_matrix, vec_g).squeeze(1)
+		# 			##context_vec = vec
+		# 			context_vec = torch.mm(W, vec).squeeze(1)
+		# 			sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
+		# 			sense_scores.append(sim)
 
-		# print('relevant_sks', relevant_sks)
-		# print('sense_scores', sense_scores)
-		# print('matches', matches)
+	# 	matches = list(zip(relevant_sks, sense_scores))
+	# 	matches = sorted(matches, key=lambda x: x[1], reverse=True)
+	# 	# print('matches', matches)
+	# 	return matches[:topn]
 
-		# return matches
+	# 	# sense_scores = torch.tensor(sense_scores)
+	# 	# if len(sense_scores)>0:
+	# 	# 	i = torch.argmax(sense_scores)
+	# 	# 	matches.append((relevant_sks[i], sense_scores[i]))
+
+	# 	# print('relevant_sks', relevant_sks)
+	# 	# print('sense_scores', sense_scores)
+	# 	# print('matches', matches)
+
+	# 	# return matches
 
 
 if __name__ == '__main__':
@@ -280,7 +334,7 @@ if __name__ == '__main__':
 
 	device = torch.device(args.device)
 	
-	results_path = 'data/results/wic.compare.%s.txt' % args.eval_set
+	# results_path = 'data/results/wic.compare.%s.txt' % args.eval_set
 
 
 	word2id = dict()
@@ -318,16 +372,18 @@ if __name__ == '__main__':
 		ex1_curr_word, ex1_curr_vector = bert_ex1[idx1]
 		ex1_curr_lemma = wn_lemmatize(word, postag)
 		if ex1_curr_lemma not in glove_embeddings:
-			continue
+			vec_g1 = torch.randn(args.emb_dim, dtype=torch.float32, device=device, requires_grad=False)
+			# continue
 		##vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma].reshape(300, 1)).to(device)
-		vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma]).to(device)
+		else:
+			vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma]).to(device)
 	
 		ex1_matches = senses_vsm.match_senses(ex1_curr_vector, W, vec_g1, lemma=ex1_curr_lemma, postag=postag, topn=None)
 		##ex1_matches = senses_vsm.match_senses(ex1_curr_vector, vec_g1, lemma=ex1_curr_lemma, postag=postag, topn=None)
-		if len(ex1_matches) == 0:
-		   continue
+		# if len(ex1_matches) == 0:
+		#    continue
 
-		ex1_match_senses = [(wn_sensekey2synset(sk), score) for sk, score in ex1_matches]
+		# ex1_match_senses = [(wn_sensekey2synset(sk), score) for sk, score in ex1_matches]
 
 		ex1_A_matric = torch.from_numpy(senses_vsm.get_A(ex1_matches[0][0])).to(device)
 		ex1_sense_vec = ex1_A_matric * vec_g1
@@ -338,16 +394,18 @@ if __name__ == '__main__':
 		ex2_curr_word, ex2_curr_vector = bert_ex2[idx2]
 		ex2_curr_lemma = wn_lemmatize(word, postag)
 		if ex2_curr_lemma not in glove_embeddings:
-			continue
+			vec_g2 = torch.randn(args.emb_dim, dtype=torch.float32, device=device, requires_grad=False)
+			# continue
 		##vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma].reshape(300, 1)).to(device)
-		vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma]).to(device)
+		else:
+			vec_g2 = torch.from_numpy(glove_embeddings[ex2_curr_lemma]).to(device)
 			
 		ex2_matches = senses_vsm.match_senses(ex2_curr_vector, W, vec_g2, lemma=ex2_curr_lemma, postag=postag, topn=None)
 		##ex2_matches = senses_vsm.match_senses(ex2_curr_vector, vec_g2, lemma=ex2_curr_lemma, postag=postag, topn=None)
-		if len(ex2_matches) == 0:
-		   continue
+		# if len(ex2_matches) == 0:
+		#    continue
 
-		ex2_match_senses = [(wn_sensekey2synset(sk), score) for sk, score in ex2_matches]
+		# ex2_match_senses = [(wn_sensekey2synset(sk), score) for sk, score in ex2_matches]
 
 		ex2_A_matric = torch.from_numpy(senses_vsm.get_A(ex2_matches[0][0])).to(device)
 		ex2_sense_vec = ex2_A_matric * vec_g2
@@ -394,4 +452,3 @@ if __name__ == '__main__':
 
 	logging.info('Saving model to %s' % args.out_path)
 	joblib.dump(clf, args.out_path)
-
