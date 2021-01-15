@@ -1,4 +1,5 @@
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import logging
 import argparse
 from time import time
@@ -6,15 +7,17 @@ from datetime import datetime
 from collections import defaultdict
 from collections import Counter
 import xml.etree.ElementTree as ET
+from functools import lru_cache
+import math
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 from nltk.corpus import wordnet as wn
 import re
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
@@ -28,8 +31,10 @@ def get_args(
 
 	parser = argparse.ArgumentParser(description='WSD Evaluation.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('-glove_embedding_path', default='external/glove/glove.840B.300d.txt')
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_linear_large_{}_350.npz'.format(emb_dim))
-	parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_linear_1024_{}_350.npz'.format(emb_dim))
+	# parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_gelu_BiCi_noval_large_{}_50.npz'.format(emb_dim))
+	# parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_gelu_BiCi_noval_1024_{}_50.npz'.format(emb_dim))
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_gelu_large_{}_200.npz'.format(emb_dim))
+	parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_gelu_1024_{}_200.npz'.format(emb_dim))
 	parser.add_argument('-wsd_fw_path', help='Path to WSD Evaluation Framework', required=False,
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('-test_set', default='senseval2', help='Name of test set', required=False,
@@ -39,7 +44,7 @@ def get_args(
 	# parser.add_argument('-ignore_lemma', dest='use_lemma', action='store_false', help='Ignore lemma features', required=False)
 	parser.add_argument('-ignore_pos', dest='use_pos', action='store_false', help='Ignore POS features', required=False)
 	parser.add_argument('-thresh', type=float, default=-1, help='Similarity threshold', required=False)
-	parser.add_argument('-k', type=int, default=1, help='Number of Neighbors to accept', required=False)
+	parser.add_argument('-k', type=int, default=2, help='Number of Neighbors to accept', required=False)
 	parser.add_argument('-quiet', dest='debug', action='store_false', help='Less verbose (debug=False)', required=False)
 	parser.add_argument('-device', default='cuda', type=str)
 	# parser.set_defaults(use_lemma=True)
@@ -115,6 +120,29 @@ def str_scores(scores, n=3, r=5):  ###
 	return str([(l, round(s, r)) for l, s in scores[:n]])
 
 
+@lru_cache()
+def wn_first_sense(lemma, postag=None):
+	pos_map = {'VERB': 'v', 'NOUN': 'n', 'ADJ': 'a', 'ADV': 'r'}
+	first_synset = wn.synsets(lemma, pos=pos_map[postag])[0]
+	found = False
+	for lem in first_synset.lemmas():
+		key = lem.key()
+		if key.startswith('{}%'.format(lemma)):
+			found = True
+			break
+	assert found
+	return key
+
+
+def gelu(x):
+    """ Original Implementation of the gelu activation function in Google Bert repo when initialy created.
+        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+        Also see https://arxiv.org/abs/1606.08415
+    """
+    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
+
 def load_senseMatrices_npz(path):
 	logging.info("Loading Pre-trained Sense Matrices ...")
 	A = np.load(path, allow_pickle=True)	# A is loaded a 0d array
@@ -162,7 +190,7 @@ def get_sk_type(sensekey):
 
 
 def get_sk_lemma(sensekey):
-    return sensekey.split('%')[0]
+	return sensekey.split('%')[0]
 
 
 def get_bert_embedding(sent):
@@ -189,7 +217,7 @@ def get_bert_embedding(sent):
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) 
 			merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)
-			##merged_vec = torch.from_numpy(merged_vec.reshape(768, 1)).to(device)
+			# merged_vec = torch.from_numpy(merged_vec.reshape(768, 1)).to(device)
 		sent_tokens_vecs.append((token, merged_vec))
 
 	return sent_tokens_vecs
@@ -223,6 +251,10 @@ class SensesVSM(object):
 		elif self.vecs_path.endswith('.npz'):
 			self.load_npz(self.vecs_path)
 		self.load_aux_senses()
+
+		# self.load_B('data/vectors/paramB.semcor_diagonal_gelu_BiCi_noval_1024_{}_50.npz'.format(300))
+		# self.load_C('data/vectors/paramC.semcor_diagonal_gelu_BiCi_noval_1024_{}_50.npz'.format(300))
+
 		'''
 		if normalize:
 			self.normalize()
@@ -253,6 +285,30 @@ class SensesVSM(object):
 		logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(self.A))
 
 
+	def load_B(self, path):
+		self.matrices = []
+		logging.info("Loading Pre-trained Sense Matrices ...")
+		loader = np.load(path, allow_pickle=True)    # A is loaded a 0d array
+		loader = np.atleast_1d(loader.f.arr_0)       # convert it to a 1d array with 1 element
+		self.B = loader[0]								 # a dictionary, key is sense id and value is sense matrix 
+		self.B_labels = list(self.B.keys())
+		self.B_labels_set = set(self.B_labels)
+		self.B_indices = {l: i for i, l in enumerate(self.B_labels)}
+		logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(self.B))
+		
+
+	def load_C(self, path):
+		self.matrices = []
+		logging.info("Loading Pre-trained Sense Matrices ...")
+		loader = np.load(path, allow_pickle=True)    # A is loaded a 0d array
+		loader = np.atleast_1d(loader.f.arr_0)       # convert it to a 1d array with 1 element
+		self.C = loader[0]								 # a dictionary, key is sense id and value is sense matrix 
+		self.C_labels = list(self.C.keys())
+		self.C_labels_set = set(self.C_labels)
+		self.C_indices = {l: i for i, l in enumerate(self.C_labels)}
+		logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(self.C))
+
+
 	def load_aux_senses(self):
 
 		self.sk_lemmas = {sk: get_sk_lemma(sk) for sk in self.labels}
@@ -274,9 +330,9 @@ class SensesVSM(object):
 		self.vectors = (self.vectors.T / norms).T
 	'''
 
-	def get_A(self, label):
-		# return self.A[self.indices[label]]	## For txt file
-		return self.A[label]	## For npz file
+	# def get_A(self, label):
+	# 	# return self.A[self.indices[label]]	## For txt file
+	# 	return self.A[label]	## For npz file
 
 
 	def match_senses(self, vec, W, vec_g, lemma=None, postag=None, topn=100):
@@ -292,37 +348,17 @@ class SensesVSM(object):
 					relevant_sks.append(sk)
 					
 					A_matrix = torch.from_numpy(self.A[sk]).to(device)
-					senseVec = A_matrix * vec_g
-					##senseVec = torch.mm(A_matrix, vec_g).squeeze(1)
+					# paramB = torch.from_numpy(self.B[sk]).to(device)
+					# paramC = torch.from_numpy(self.C[sk]).to(device)
+					sense_vec = A_matrix * vec_g
+					senseVec = gelu(sense_vec)
+					# senseVec = gelu(paramC * gelu(paramB * (gelu(sense_vec))))
+					## senseVec = torch.mm(A_matrix, vec_g).squeeze(1)
 					##context_vec = vec
 					context_vec = torch.mm(W, vec).squeeze(1)
-					sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
+					sim = torch.dot(context_vec, sense_vec) / (context_vec.norm() * sense_vec.norm())
 					sense_scores.append(sim)
 		
-
-		# if (lemma is None) or (lemma in self.known_lemmas):
-		# 	# if (postag is None) or (postag in self.sks_by_pos[self.sk_postags[s]] for s in self.lemma_sks[lemma]):
-		# 		for sk in self.lemma_sks[lemma]:
-		# 			relevant_sks.append(sk)
-		# 			A_matrix = torch.from_numpy(self.A[sk]).to(device)
-		# 			senseVec = A_matrix * vec_g
-		# 			##senseVec = torch.mm(A_matrix, vec_g).squeeze(1)
-		# 			##context_vec = vec
-		# 			context_vec = torch.mm(W, vec).squeeze(1)
-		# 			sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
-		# 			sense_scores.append(sim)
-
-		# else:		## For the lemma that is not related to any sense_id
-		# 	print('lemma not related to any sense_id:', lemma)
-		# 	# relevant_sks.append(None)
-		# 	# sense_scores.append(0.0)
-		# 	for unk_sk in self.labels:
-		# 		relevant_sks.append(unk_sk)
-		# 		unk_A_matrix = torch.from_numpy(self.A[unk_sk]).to(device)
-		# 		unk_senseVec = unk_A_matrix * vec_g
-		# 		unk_context_vec = torch.mm(W, vec).squeeze(1)
-		# 		unk_sim = torch.dot(unk_context_vec, unk_senseVec) / (unk_context_vec.norm() * unk_senseVec.norm())
-		# 		sense_scores.append(unk_sim)
 
 		matches = list(zip(relevant_sks, sense_scores))
 		matches = sorted(matches, key=lambda x: x[1], reverse=True)
@@ -360,7 +396,9 @@ if __name__ == '__main__':
 	# lemmas = []
 	# vectors = []
 
-	senses_vsm = SensesVSM(args.sv_path, normalize=True)
+	relu = nn.ReLU(inplace=True)
+
+	senses_vsm = SensesVSM(args.sv_path)
 	tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
 	model = BertModel.from_pretrained('bert-large-cased')
 	model.eval()
@@ -386,6 +424,7 @@ if __name__ == '__main__':
 	Initialize various counters for calculating supplementary metrics.
 	'''
 	n_instances, n_correct, n_unk_lemmas, acc_sum = 0, 0, 0, 0
+	n_incorrect = 0
 	num_options = []
 	correct_idxs = []
 	failed_by_pos = defaultdict(list)
@@ -430,7 +469,7 @@ if __name__ == '__main__':
 						continue
 			
 					# curr_lemma = sent_info['lemmas'][mw_idx]
-					# if curr_lemma not in lemmas:
+					# if curr_lemma not in senses_vsm.known_lemmas:
 					# 	continue  # skips hurt performance in official scorer
 
 					# curr_postag = sent_info['pos'][mw_idx]
@@ -438,12 +477,12 @@ if __name__ == '__main__':
 					# if curr_lemma not in glove_embeddings.keys():
 					# 	continue
 					# # currVec_g = torch.from_numpy(glove_embeddings[curr_lemma].reshape(300, 1)).to(device)
-					# currVec_g = torch.from_numpy(glove_embeddings[curr_lemma]).to(device)
+					# currVec_g = glove_embeddings[curr_lemma].to(device)
 					# currVec_c = torch.mean(torch.stack([sent_bert[i][1] for i in tok_idxs]), dim=0)		
 
 					curr_lemma = sent_info['lemmas'][mw_idx]
-					if curr_lemma not in senses_vsm.known_lemmas:
-						continue  # skips hurt performance in official scorer
+					# if curr_lemma not in senses_vsm.known_lemmas:
+					# 	continue  # skips hurt performance in official scorer
 
 					curr_postag = sent_info['pos'][mw_idx]
 					curr_tokens = [sent_info['tokens'][i] for i in tok_idxs]
@@ -463,62 +502,51 @@ if __name__ == '__main__':
 							multi_words.append(token_word)
 
 					if len(multi_words) == 0:
+						# currVec_g = torch.randn(300, dtype=torch.float32, device=device, requires_grad=False)
 						continue
 
-					currVec_g = torch.mean(torch.stack([glove_embeddings[w] for w in multi_words]), dim=0).to(device)		
+					else:
+						currVec_g = torch.mean(torch.stack([glove_embeddings[w] for w in multi_words]), dim=0).to(device)		
 
 					matches = []
 					if curr_lemma not in senses_vsm.known_lemmas:
 						n_unk_lemmas += 1
+						# continue
+						matches = [(wn_first_sense(curr_lemma, curr_postag), 1)]
 
 					else:
 						matches = senses_vsm.match_senses(currVec_c, W, currVec_g, lemma=curr_lemma, postag=curr_postag, topn=None)
 
 					num_options.append(len(matches))
 
+					# predict = [sk for sk, sim in matches if sim > args.thresh][:args.k]
 					predict = [sk for sk, sim in matches if sim > args.thresh][:args.k]
+					# predict = " ".join(pred for pred in predict)
+					print('predict', predict)
+					# print('curr_sense', curr_sense)
 
 					if len(predict) > 0:
-						results_f.write('%s %s\n' % (curr_sense, predict[0]))
-
-
-					# sense_scores = []
-
-					# for sense_id in senseKeys:
-					# 	'''check if curr_lemma is in both pre-trained sense matrices and current dataset'''
-					# 	if curr_lemma == sense_id.split('%')[0]: 
-					# 		A_matrix = torch.from_numpy(A[sense_id]).to(device)
-					# 		##z = ((torch.mm(W, currVec_c).squeeze(1)) - A_matrix * currVec_g).norm() ** 2
-					# 		senseVec = A_matrix * currVec_g
-					# 		##sim = torch.dot(vec, senseVec) / (vec.norm() * senseVec.norm())
-
-					# 		context_vec = torch.mm(W, currVec_c).squeeze(1)
-					# 		sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
-					# 		sense_scores.append((sim.item(), sense_id))
-					# 		##z = (currVec_c - A_matrix * currVec_g).norm()
-					# 		#disSims.append((z.item(), sense_id))
-						
-					# '''take the neareast neighbour as the predicted sense'''
-					# sense_scores = sorted(sense_scores, key=lambda x: x[0], reverse=True)
-					# max_sim = sense_scores[0]
-					# predict = max_sim[1]
-					
-					# results_f.write('%s %s\n' % (curr_id, predict))
+						# results_f.write('%s %s\n' % (curr_sense, predict[0]))
+						results_f.write('{} {}\n'.format(curr_sense, predict[0]))
 
 					'''check if our prediction(s) was correct, register POS of mistakes'''
 					n_instances += 1
 					wsd_correct = False
 					gold_sensekeys = id2senses[curr_sense]
 
+					print('gold_sensekeys', gold_sensekeys)
+
 					# if gold_sensekeys[0] == predict:
 					if len(set(predict).intersection(set(gold_sensekeys))) > 0:
 						n_correct += 1
 						wsd_correct = True
+					elif len(predict) > 0:
+						n_incorrect += 1
+
+					if len(predict) > 0:
+						failed_by_pos[curr_postag].append((predict, gold_sensekeys))
 					else:
-						if len(predict) > 0:
-							failed_by_pos[curr_postag].append((predict, gold_sensekeys))
-						else:
-							failed_by_pos[curr_postag].append((None, gold_sensekeys))
+						failed_by_pos[curr_postag].append((None, gold_sensekeys))
 
 
 					'''register if our prediction belonged to a different POS than gold'''
@@ -536,9 +564,24 @@ if __name__ == '__main__':
 							break
 
 					acc = n_correct / n_instances
+					
 					logging.info('ACC: %.3f (%d %d/%d)' % (
 						acc, n_instances, sent_info['idx'], len(eval_instances)))
 
+	precision = (n_correct / (n_correct + n_incorrect)) * 100
+	recall = (n_correct / len(id2senses)) * 100
+	if (precision+recall) == 0.0:
+		f_score = 0.0
+	else:
+		f_score = 2 * precision * recall / (precision + recall)
+
+	# print('***********************')
+	logging.info('n_correct', n_correct)
+	logging.info('n_instances', n_instances)
+	logging.info('n_incorrect', n_incorrect)
+	logging.info('precision: %.1f' % precision)
+	logging.info('recall: %.1f' % recall)
+	logging.info('f_score: %.1f' % f_score)
 
 
 	if args.debug:
@@ -559,3 +602,4 @@ if __name__ == '__main__':
 
 	logging.info('Running official scorer ...')
 	run_scorer(args.wsd_fw_path, args.test_set, results_path)		
+
