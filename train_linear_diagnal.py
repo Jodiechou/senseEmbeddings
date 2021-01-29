@@ -10,7 +10,7 @@ import os
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
@@ -435,6 +435,4 @@ if __name__ == '__main__':
 	logging.info('Total number of senses: %d ' % len(sense_matrix))
 	logging.info('Written %s' % save_sense_matrix_path)	
 	logging.info('Written %s' % save_weight_path)
-
-
 
