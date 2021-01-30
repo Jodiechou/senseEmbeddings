@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import logging
 import argparse
 from time import time
@@ -33,8 +33,8 @@ def get_args(
 	parser.add_argument('-glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	# parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_gelu_BiCi_noval_large_{}_50.npz'.format(emb_dim))
 	# parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_gelu_BiCi_noval_1024_{}_50.npz'.format(emb_dim))
-	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_gelu_large_{}_200.npz'.format(emb_dim))
-	parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_gelu_1024_{}_200.npz'.format(emb_dim))
+	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_linear_large_{}_200.npz'.format(emb_dim))
+	parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_linear_1024_{}_200.npz'.format(emb_dim))
 	parser.add_argument('-wsd_fw_path', help='Path to WSD Evaluation Framework', required=False,
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
 	parser.add_argument('-test_set', default='senseval2', help='Name of test set', required=False,
@@ -351,7 +351,7 @@ class SensesVSM(object):
 					# paramB = torch.from_numpy(self.B[sk]).to(device)
 					# paramC = torch.from_numpy(self.C[sk]).to(device)
 					sense_vec = A_matrix * vec_g
-					senseVec = gelu(sense_vec)
+					# senseVec = gelu(sense_vec)
 					# senseVec = gelu(paramC * gelu(paramB * (gelu(sense_vec))))
 					## senseVec = torch.mm(A_matrix, vec_g).squeeze(1)
 					##context_vec = vec
@@ -454,7 +454,7 @@ if __name__ == '__main__':
 	Iterate over evaluation instances and write predictions in WSD_Evaluation_Framework's format.
 	File with predictions is processed by the official scorer after iterating over all instances.
 	'''
-	results_path = 'data/results/%d.%s.%s.key' % (int(time()), args.test_set, args.merge_strategy)
+	results_path = 'data/results/%d.%s.%s11111.key' % (int(time()), args.test_set, args.merge_strategy)
 	with open(results_path, 'w') as results_f:
 		for batch_idx, batch in enumerate(chunks(eval_instances, args.batch_size)):
 
@@ -502,8 +502,8 @@ if __name__ == '__main__':
 							multi_words.append(token_word)
 
 					if len(multi_words) == 0:
-						# currVec_g = torch.randn(300, dtype=torch.float32, device=device, requires_grad=False)
-						continue
+						currVec_g = torch.randn(300, dtype=torch.float32, device=device, requires_grad=False)
+						# continue
 
 					else:
 						currVec_g = torch.mean(torch.stack([glove_embeddings[w] for w in multi_words]), dim=0).to(device)		
@@ -519,7 +519,6 @@ if __name__ == '__main__':
 
 					num_options.append(len(matches))
 
-					# predict = [sk for sk, sim in matches if sim > args.thresh][:args.k]
 					predict = [sk for sk, sim in matches if sim > args.thresh][:args.k]
 					# predict = " ".join(pred for pred in predict)
 					print('predict', predict)
@@ -575,14 +574,6 @@ if __name__ == '__main__':
 	else:
 		f_score = 2 * precision * recall / (precision + recall)
 
-	# print('***********************')
-	logging.info('n_correct', n_correct)
-	logging.info('n_instances', n_instances)
-	logging.info('n_incorrect', n_incorrect)
-	logging.info('precision: %.1f' % precision)
-	logging.info('recall: %.1f' % recall)
-	logging.info('f_score: %.1f' % f_score)
-
 
 	if args.debug:
 		logging.info('Supplementary Metrics:')
@@ -599,7 +590,11 @@ if __name__ == '__main__':
 		for pos in pos_confusion:
 			logging.info('%s - %s' % (pos, str(pos_confusion[pos])))
 
+		logging.info('precision: %.1f' % precision)
+		logging.info('recall: %.1f' % recall)
+		logging.info('f_score: %.1f' % f_score)
 
-	logging.info('Running official scorer ...')
-	run_scorer(args.wsd_fw_path, args.test_set, results_path)		
+
+	# logging.info('Running official scorer ...')
+	# run_scorer(args.wsd_fw_path, args.test_set, results_path)		
 
