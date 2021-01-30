@@ -40,10 +40,41 @@ $ unzip WSD_Evaluation_Framework.zip
 ## Train the model
 After obtaining word embeddings and contextualised embeddings, we can train the model using this:
 ```
-$ python train_linear.py
+usage: train_linear_diagonal.py [-h]
+                                [--glove_embedding_path GLOVE_EMBEDDING_PATH]
+                                [--num_epochs NUM_EPOCHS] [--loss {standard}]
+                                [--emb_dim EMB_DIM]
+                                [--diagonalize DIAGONALIZE] [--device DEVICE]
+                                [--bert BERT] [--wsd_fw_path WSD_FW_PATH]
+                                [--dataset {semcor,semcor_omsti}]
+                                [--batch_size BATCH_SIZE] [--lr LR]
+                                [--merge_strategy {mean,first,sum}]
+
+Word Sense Mapping
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --glove_embedding_path GLOVE_EMBEDDING_PATH
+  --num_epochs NUM_EPOCHS
+  --loss {standard}
+  --emb_dim EMB_DIM
+  --diagonalize DIAGONALIZE
+  --device DEVICE
+  --bert BERT
+  --wsd_fw_path WSD_FW_PATH
+                        Path to Semcor
+  --dataset {semcor,semcor_omsti}
+                        Name of dataset
+  --batch_size BATCH_SIZE
+                        Batch size
+  --lr LR               Learning rate
+  --merge_strategy {mean,first,sum}
+                        WordPiece Reconstruction Strategy
+
 ```
 
 ## WSD Evaluation
+Usage description.
 ```
 $ python eval.py -h
 usage: eval.py [-h] -sv_path SV_PATH [--load_weight_path LOAD_WEIGHT_PATH]
@@ -73,15 +104,11 @@ optional arguments:
   -quiet                Less verbose (debug=False) (default: True)
 
 ```
+To replicate, use as follows:
 ```
-$  python eval.py -sv_path data/vectors/senseMatrix.semcor_300.npz -test_set semeval2007
+$  python eval.py -sv_path data/vectors/senseMatrix.semcor_diagonal_linear_large_300_200.npz -test_set ALL
 ```
 
-## SCWS Evaluation
-To evaluate on SCWS dataset by running this:
-```
-$ python eval_scws.py -sv_path data/vectors/senseMatrix.semcor_300.npz
-```
 
 ## WiC evaluation
 You'll need to download the WiC dataset and place it in 'external/wic/':
@@ -90,10 +117,18 @@ $ cd external/wic
 $ wget https://pilehvar.github.io/wic/package/WiC_dataset.zip
 $ unzip WiC_dataset.zip
 ```
+
+
 ### Sense Comparison
-To evaluate sense comparison, use:
+Usage description.
+
+To train binary classifier, use:
 ```
-$ python eval_wic.py -sv_path data/vectors/senseMatrix.semcor_300.npz -eval_set dev
+$ python train_classifier.py
+```
+Evaluation using Classifier
+```
+$ python eval_classifier_wic.py
 ```
 
 
