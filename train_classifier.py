@@ -280,48 +280,10 @@ class SensesVSM(object):
 				unk_sim = torch.dot(unk_context_vec, unk_senseVec) / (unk_context_vec.norm() * unk_senseVec.norm())
 				sense_scores.append(unk_sim)
 
-
-
 		matches = list(zip(relevant_sks, sense_scores))
 		matches = sorted(matches, key=lambda x: x[1], reverse=True)
 		# print('matches', matches)
 		return matches[:topn]
-
-	# def match_senses(self, vec, W, vec_g, lemma=None, postag=None, topn=100):
-	# ##def match_senses(self, vec, vec_g, lemma=None, postag=None, topn=100):
-	# 	matches = []
-	# 	relevant_sks = []
-	# 	distance = []
-	# 	sense_scores = []
-		
-	# for sk in self.labels:
-		# 	if (lemma is None) or (self.sk_lemmas[sk] == lemma):
-		# 		if (postag is None) or (self.sk_postags[sk] == postag):
-		# 			relevant_sks.append(sk)
-					
-		# 			A_matrix = torch.from_numpy(self.A[sk]).to(device)
-		# 			senseVec = A_matrix * vec_g
-		# 			##senseVec = torch.mm(A_matrix, vec_g).squeeze(1)
-		# 			##context_vec = vec
-		# 			context_vec = torch.mm(W, vec).squeeze(1)
-		# 			sim = torch.dot(context_vec, senseVec) / (context_vec.norm() * senseVec.norm())
-		# 			sense_scores.append(sim)
-
-	# 	matches = list(zip(relevant_sks, sense_scores))
-	# 	matches = sorted(matches, key=lambda x: x[1], reverse=True)
-	# 	# print('matches', matches)
-	# 	return matches[:topn]
-
-	# 	# sense_scores = torch.tensor(sense_scores)
-	# 	# if len(sense_scores)>0:
-	# 	# 	i = torch.argmax(sense_scores)
-	# 	# 	matches.append((relevant_sks[i], sense_scores[i]))
-
-	# 	# print('relevant_sks', relevant_sks)
-	# 	# print('sense_scores', sense_scores)
-	# 	# print('matches', matches)
-
-	# 	# return matches
 
 
 if __name__ == '__main__':
@@ -430,21 +392,7 @@ if __name__ == '__main__':
 		s4_sim = np.dot(ex2_context_vec, ex2_sense_vec)
 
 		instances.append([s1_sim, s2_sim, s3_sim, s4_sim])
-
-
-		# # # If the two vectors u and v, [u;v; u-v; u\Tv]
-		# distance = np.linalg.norm(ex1_sense_vec-ex2_sense_vec)
-		# sim = np.dot(ex1_sense_vec, ex2_sense_vec)
-		# feat1 = np.concatenate((ex1_sense_vec, ex2_sense_vec))
-		# # print('shape of feat1', feat1.shape)
-		# feat2 = np.append(distance, sim)
-		# # print('shape of feat2', feat2.shape)
-		# features = np.append(feat1, feat2)
-		# # print('shape of features', features.shape)
-		# instances.append(features)
-
 		labels.append(gold)
-
 
 	logging.info('Training Logistic Regression ...')
 	clf = LogisticRegression(random_state=42)
