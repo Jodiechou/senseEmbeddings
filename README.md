@@ -16,6 +16,13 @@
 
 ## Installation
 Note that the server MUST be running on Python>=3.5 with Pytorch>=1.10.
+
+### Additional Packages
+To install additional packages used by this project run:
+```
+pip install -r requirements.txt
+```
+
 ### External Data
 Download pre-trained BERT (large-cased)
 ```
