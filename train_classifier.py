@@ -13,7 +13,7 @@ from nltk.stem import WordNetLemmatizer
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 from sklearn.linear_model import LogisticRegression
-from sklearn.externals import joblib
+import joblib
 
 wn_lemmatizer = WordNetLemmatizer()
 
