@@ -132,6 +132,26 @@ $ unzip WiC_dataset.zip
 
 ### Sense Comparison
 Usage description.
+```
+usage: train_classifier.py [-h] [--emb_dim EMB_DIM]
+                           [-glove_embedding_path GLOVE_EMBEDDING_PATH]
+                           [-eval_set {train,dev,test}] [-sv_path SV_PATH]
+                           [-load_weight_path LOAD_WEIGHT_PATH]
+                           [-out_path OUT_PATH] [-device DEVICE]
+
+Evaluation of WiC solution using LMMS for sense comparison.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --emb_dim EMB_DIM
+  -glove_embedding_path GLOVE_EMBEDDING_PATH
+  -eval_set {train,dev,test}
+                        Evaluation set
+  -sv_path SV_PATH      Path to sense vectors
+  -load_weight_path LOAD_WEIGHT_PATH
+  -out_path OUT_PATH    Path to .pkl classifier generated
+  -device DEVICE
+```
 
 To train binary classifier, use:
 ```
