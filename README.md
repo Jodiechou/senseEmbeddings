@@ -11,7 +11,6 @@
 ## Dependencise
 - Pytorch
 - Numpy
-- Scipy
 - transformers
 
 ## Installation
