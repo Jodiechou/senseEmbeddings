@@ -37,7 +37,7 @@ def get_args(
 	parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_linear_1024_{}_200.npz'.format(emb_dim))
 	parser.add_argument('-wsd_fw_path', help='Path to WSD Evaluation Framework', required=False,
 						default='external/wsd_eval/WSD_Evaluation_Framework/')
-	parser.add_argument('-test_set', default='senseval2', help='Name of test set', required=False,
+	parser.add_argument('-test_set', default='ALL', help='Name of test set', required=False,
 						choices=['senseval2', 'senseval3', 'semeval2007', 'semeval2013', 'semeval2015', 'ALL'])
 	parser.add_argument('-batch_size', type=int, default=batch_size, help='Batch size', required=False)
 	parser.add_argument('-merge_strategy', type=str, default='mean', help='WordPiece Reconstruction Strategy', required=False)
@@ -454,7 +454,7 @@ if __name__ == '__main__':
 	Iterate over evaluation instances and write predictions in WSD_Evaluation_Framework's format.
 	File with predictions is processed by the official scorer after iterating over all instances.
 	'''
-	results_path = 'data/results/%d.%s.%s11111.key' % (int(time()), args.test_set, args.merge_strategy)
+	results_path = 'data/results/%d.%s.%s.key' % (int(time()), args.test_set, args.merge_strategy)
 	with open(results_path, 'w') as results_f:
 		for batch_idx, batch in enumerate(chunks(eval_instances, args.batch_size)):
 
