@@ -596,5 +596,5 @@ if __name__ == '__main__':
 
 
 	# logging.info('Running official scorer ...')
-	# run_scorer(args.wsd_fw_path, args.test_set, results_path)		
+	# run_scorer(args.wsd_fw_path, args.test_set, results_path)	
 
