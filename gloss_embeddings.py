@@ -2,14 +2,10 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import time
 import numpy as np 
-import torch.optim as optim
 import torch
-import random
-from collections import defaultdict
 
 import logging
 import argparse
-import lxml.etree
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 from nltk.corpus import wordnet as wn
 from nltk import word_tokenize
@@ -73,10 +69,12 @@ if __name__ == '__main__':
 
 
 	logging.info('Writing Vectors %s ...' % args.out_path)
-	with open(args.out_path, 'w') as vecs_senses_f:
-		for sensekey, sensekey_vecs in glosses_vecs.items():
-			vec = np.array(sensekey_vecs)
-			vec_str = ' '.join([str(round(v, 6)) for v in vec.tolist()])
-			vecs_senses_f.write('%s %s\n' % (sensekey, vec_str))
+	np.savez(args.out_path, glosses_vecs)
+
+	# with open(args.out_path, 'w') as vecs_senses_f:
+	# 	for sensekey, sensekey_vecs in glosses_vecs.items():
+	# 		vec = np.array(sensekey_vecs)
+	# 		vec_str = ' '.join([str(round(v, 6)) for v in vec.tolist()])
+	# 		vecs_senses_f.write('%s %s\n' % (sensekey, vec_str))
 	logging.info('Done')
 
