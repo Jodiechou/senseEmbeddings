@@ -143,7 +143,7 @@ if __name__ == "__main__":
 	sv_path = 'data/vectors/senseMatrix.semcor_diagonal_linear_large_bertlast4layers_multiword_300_50.npz'
 	# b_path = 'data/vectors/paramB.semcor_diagonal_gelu_BiCi_noval_1024_300_50.npz'
 	# c_path = 'data/vectors/paramC.semcor_diagonal_gelu_BiCi_noval_1024_300_50.npz'
-	ares_embedding_path = 'external/ares/glove_bert_large.txt'
+	ares_embedding_path = 'external/ares/ares_bert_large.txt'
 
 	glove_embedding_path = 'external/glove/glove.840B.300d.txt'
 
