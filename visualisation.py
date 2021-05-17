@@ -145,8 +145,9 @@ if __name__ == "__main__":
 		vec_g = glove_embeddings[lemma]
 		vec = A_matrix_temp * vec_g
 		cont_vec = np.concatenate((ares_embeddings[s], vec), axis=0)
-		sense_embeddings[lemma] = vec_g
-		sense_embeddings[lemma] = ares_embeddings[s]
 		# sense_embeddings[lemma] = vec_g
+		sense_embeddings[lemma] = cont_vec
+		# sense_embeddings[lemma] = vec_g
+
 	tsne_plot(sense_embeddings)
 
