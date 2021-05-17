@@ -6,9 +6,7 @@ import matplotlib
 matplotlib.use('Agg')
 import numpy as np
 import math
-# import sklearn
-import xml.etree.ElementTree as ET
-from sklearn.manifold import TSNE
+# import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import savefig
 import gensim
@@ -18,12 +16,9 @@ import lxml.etree
 import tensorflow as tf
 import sensebert
 from sensebert import SenseBert
-
 from scipy.spatial import distance
-
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
-tsne = TSNE(random_state=1, n_iter=1000, metric="cosine")
 
 def lemmatize(w):
 	lemma = w.split('%')[0]
@@ -34,8 +29,6 @@ def load_instances(train_path, keys_path):
 	"""Parse XML of split set and return list of instances (dict)."""
 	instances = []
 	sense_mapping = get_sense_mapping(keys_path)
-	# tree = ET.parse(train_path)
-	# for text in tree.getroot():
 	text = read_xml_sents(train_path)
 	for sent_idx, sentence in enumerate(text):
 		inst = {'tokens': [], 'tokens_mw': [], 'lemmas': [], 'senses': [], 'pos': [], 'id': []}
@@ -76,7 +69,6 @@ def get_sense_mapping(keys_path):
 			id_ = line.split()[0]
 			keys = line.split()[1:]
 			sensekey_mapping[id_] = keys
-
 	return sensekey_mapping
 
 
@@ -116,9 +108,7 @@ def get_bert_embedding(sent):
 			sub.append(encoded_token)
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) 
-			# merged_vec = torch.from_numpy(merged_vec.reshape(1024, 1)).to(device)  #### when use sense embeddings
-			##merged_vec = torch.from_numpy(merged_vec.reshape(768, 1)).to(device)
-			merged_vec = torch.from_numpy(merged_vec).to(device)    #### when use BERT embeddings only
+			merged_vec = torch.from_numpy(merged_vec).to(device) 
 		sent_tokens_vecs.append((token, merged_vec))
 
 	return sent_tokens_vecs
@@ -146,57 +136,6 @@ def gelu(x):
 	return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
-def tsne_plot(sense_embeddings):
-	"Creates and TSNE model and plots it"
-	labels = []
-	tokens = []
-
-	for sense in sense_embeddings.keys():
-		tokens.append(sense_embeddings[sense])
-		labels.append(sense)
-
-
-	# tokens = np.array(tokens)
-	# tsne_model = TSNE(n_components=2, init='pca', random_state=64)
-	# rs = sklearn.utils.check_random_state(None)
-	# print('random state:', rs)
-	tsne_model = TSNE(n_components=2, init='pca', perplexity=3, n_iter=1500, metric='cosine')
-	
-	# print('tokens', tokens)
-	new_values = tsne_model.fit_transform(tokens)
-	print('new_values.shape', new_values.shape)
-
-	x = []
-	y = []
-	for value in new_values:
-		x.append(value[0])
-		y.append(value[1])
-		
-	plt.figure(figsize=(5, 5)) 
-
-	# colors = ['r','b']
-	# Label_Com = ['Component 1','Component 2']
-
-	for i in range(len(x)):
-		if i < 8 and i != 1:
-			plt.scatter(x[i], y[i], c='r')
-		else:
-			plt.scatter(x[i], y[i], c='b')
-		plt.annotate(labels[i],
-					 xy=(x[i], y[i]),
-					 xytext=(5, 2),
-					 textcoords='offset points',
-					 ha='right',
-					 va='bottom')
-
-	path = 'data/figure/train_sense_gelu_200.png'
-
-	savefig(path, dpi=None, facecolor='w', edgecolor='w',
-		orientation='portrait', papertype=None, format=None,
-		transparent=False, bbox_inches=None, pad_inches=0.1,
-		frameon=None, metadata=None)
-
-
 def load_npz(sv_path):
 	logging.info("Loading Pre-trained Sense Matrices ...")
 	A = np.load(sv_path, allow_pickle=True)	# A is loaded a 0d array
@@ -215,17 +154,22 @@ def load_lmms(npz_vecs_path):
 		lmms[label] = vector
 	return lmms
 
+
+def load_ares(ares_path):
+		sense_vecs = {}
+		with open(ares_path, 'r') as sfile:
+			for idx, line in enumerate(sfile):
+				if idx == 0:
+					continue
+				splitLine = line.split(' ')
+				label = splitLine[0]
+				vec = np.array(splitLine[1:], dtype='float32')
+				dim = vec.shape[0]
+				# print('self.dim', self.dim)
+				sense_vecs[label] = vec
+		return sense_vecs
+
 def get_sensebert_embeddings(sent):
-
-	# with tf.Session() as session:
-	# 	# sensebert_model = SenseBert("sensebert-large-uncased", session=session)    # or sensebert-large-uncased
-	# 	sensebert_model = SenseBert(model, tokenizer, session=session)
-	# 	input_ids, input_mask = sensebert_model.tokenize(sent)
-	# 	# print('sensebert_model.tokenize(sent)', sensebert_model.tokenize(sent))
-	# 	model_outputs = sensebert_model.run(input_ids, input_mask)
-
-	# with tf.device("/device:GPU:0"):
-	# sensebert_model = SenseBert("sensebert-large-uncased", session=session)    # or sensebert-large-uncased
 	sensebert_model = SenseBert(model, tokenizer, session=session)
 	input_ids, input_mask = sensebert_model.tokenize(sent)
 	# print('sensebert_model.tokenize(sent)', sensebert_model.tokenize(sent))
@@ -241,9 +185,7 @@ def get_sensebert_embeddings(sent):
 if __name__ == "__main__":
 
 
-	sv_path = 'data/vectors/senseMatrix.semcor_diagonal_gelu_large_300_50.npz'
-	# load_weight_path = 'data/vectors/weight.semcor_diagonal_gelu_1024_300_50.npz'
-
+	sv_path = 'data/vectors/senseMatrix.semcor_diagonal_linear_large_bertlast4layers_multiword_300_50.npz'
 	glove_embedding_path = 'external/glove/glove.840B.300d.txt'
 
 	wsd_fw_set_path = 'example.xml'
@@ -252,18 +194,14 @@ if __name__ == "__main__":
 	instances = load_instances(wsd_fw_set_path, wsd_fw_gold_path)
 	logging.info('Finish formating data')
 
-	# print('instances', instances)
-
 	target_word = 'bank'
-	target_sense = 'bank%1:17:01::'  ####   bank%1:14:00::    
+	target_sense = 'bank%1:17:01::'  #### bank%1:17:01::    bank%1:14:00::
 
 	device = torch.device('cuda')
 
 	idx2word = {}
 	word2idx ={}
 	similarities = []
-	
-
 
 	### BERT nn --------------
 	# sent_bert_all = []
@@ -358,59 +296,53 @@ if __name__ == "__main__":
 	logging.info("Loading Glove Embeddings........")
 	glove_embeddings = load_glove_embeddings(glove_embedding_path)
 	logging.info("Done. Loaded words from GloVe embeddings")
-
+	ares = load_ares('external/ares/ares_bert_large.txt')
 
 	for sent_info in instances:
 		idx_map_abs = sent_info['idx_map_abs']
 		target_A_matrix = torch.from_numpy(A[target_sense]).to(device)
-		# print('target_A_matrix', target_A_matrix)
 		target_g_vec = glove_embeddings[target_word].to(device)
 		target_sense_vec = target_A_matrix * target_g_vec
+		target_ares_vec = torch.from_numpy(ares[target_sense]).to(device)
+		target_cdes_vec = torch.cat((target_ares_vec, target_sense_vec), 0)
 
 		for mw_idx, tok_idxs in idx_map_abs:
 			curr_sense = sent_info['senses'][mw_idx]
 
-			# print('curr_sense', curr_sense)
-
 			if curr_sense is None:
 				continue
-			# print('curr_sense', curr_sense)
 			A_matrix = torch.from_numpy(A[curr_sense[0]]).to(device)
-
 			multi_words = []
 
 			for j in tok_idxs:
-				token_word = sent_info['tokens'][j]
-						
+				token_word = sent_info['tokens'][j]			
 				if token_word in glove_embeddings.keys():
 					multi_words.append(token_word)
 
 			if len(multi_words) == 0:
 				currVec_g = torch.randn(300, dtype=torch.float32, device=device, requires_grad=False).to(device)
-
 			else:
-				# for w in multi_words:
-				# 	print('word', w)
 				currVec_g = torch.mean(torch.stack([glove_embeddings[w] for w in multi_words]), dim=0).to(device)
 
 			sense_vec = A_matrix * currVec_g
-			sense2embeddings.append((curr_sense, sense_vec))
-	# print('sense2embeddings', sense2embeddings)
+			ares_vec = torch.from_numpy(ares[curr_sense[0]]).to(device)
+			cdes_vec = torch.cat((ares_vec, sense_vec), 0)
+			sense2embeddings.append((curr_sense, cdes_vec))
 
 	for sense_temp, vec in sense2embeddings:
 		sense = sense_temp[0]
-		sim = torch.dot(target_sense_vec, vec) / (target_sense_vec.norm() * vec.norm())
+		sim = torch.dot(target_cdes_vec, vec) / (target_cdes_vec.norm() * vec.norm())
 		similarities.append((sense, sim))
 
 	sort_sims = sorted(similarities, key=lambda x: x[1], reverse=True)
 	print('sort_sims', sort_sims)
-
 	### -----------------------
 
 
-	### LMMS-------------------
+	### LMMS and ARES-------------------
 	# sense2embeddings = []
-	# lmms = load_lmms('data/lmms_2348.bert-large-cased.fasttext-commoncrawl.npz')
+	# lmms = load_lmms('../bias-sense/data/lmms_2048.bert-large-cased.npz')
+	# # ares = load_ares('external/ares/ares_bert_large.txt')
 
 	# for sent_info in instances:
 	# 	idx_map_abs = sent_info['idx_map_abs']
@@ -422,9 +354,8 @@ if __name__ == "__main__":
 	# 		if curr_sense is None:
 	# 			continue
 
-	# 		lmms_vector = torch.from_numpy(lmms[curr_sense[0]]).to(device)
-	# 		sense2embeddings.append((curr_sense, lmms_vector))
-	# print('sense2embeddings', sense2embeddings)
+	# 		vector = torch.from_numpy(lmms[curr_sense[0]]).to(device)
+	# 		sense2embeddings.append((curr_sense, vector))
 
 	# for sense, vec in sense2embeddings:
 	# 	sim = torch.dot(target_sense_vec, vec) / (target_sense_vec.norm() * vec.norm())
@@ -432,7 +363,6 @@ if __name__ == "__main__":
 
 	# sort_sims = sorted(similarities, key=lambda x: x[1], reverse=True)
 	# print('sort_sims', sort_sims)
-
 	###-------------------------
 
 
@@ -492,5 +422,3 @@ if __name__ == "__main__":
 	# sort_sims = sorted(similarities, key=lambda x: x[1], reverse=True)
 	# print('sort_sims', sort_sims)
 	###-------------------------
-
-
