@@ -4,7 +4,6 @@ import argparse
 import logging
 from functools import lru_cache
 from collections import defaultdict
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,27 +12,21 @@ from numpy.linalg import norm
 from nltk.corpus import wordnet as wn
 from nltk.stem import WordNetLemmatizer
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
-
 from sklearn.linear_model import LogisticRegression
 import joblib
 
 wn_lemmatizer = WordNetLemmatizer()
 
-import sys  # for parent directory imports
+import sys
 sys.path.insert(1, os.path.join(sys.path[0], '..'))
-
-
-
 logging.basicConfig(level=logging.DEBUG,
 					format='%(asctime)s - %(levelname)s - %(message)s',
 					datefmt='%d-%b-%y %H:%M:%S')
-
 
 def get_args(
 		emb_dim = 300,
 		diag = False
 			 ):
-
 	parser = argparse.ArgumentParser(description='Evaluation of WiC solution using LMMS for sense comparison.')
 	parser.add_argument('--emb_dim', default=emb_dim, type=int)
 	parser.add_argument('-glove_embedding_path', default='external/glove/glove.840B.300d.txt')
@@ -42,11 +35,10 @@ def get_args(
 	parser.add_argument('--lmms_embedding_path', default='../bias-sense/data/lmms_2048.bert-large-cased.npz')
 	parser.add_argument('-eval_set', default='train', help='Evaluation set', required=False, choices=['train', 'dev', 'test'])
 	parser.add_argument('-sv_path', help='Path to sense vectors', required=False, default='data/vectors/senseMatrix.semcor_diagonal_linear_large_bertlast4layers_multiword_{}_50.npz'.format(emb_dim))
-	# parser.add_argument('-load_weight_path', default='data/vectors/wsenseMatrix.semcor_diagonal_linear_large_bertlast4layers_multiword_{}_50.npz'.format(emb_dim))
+	parser.add_argument('-load_weight_path', default='data/vectors/weight.semcor_diagonal_linear_bertlast4layers_multiword_1024_{}_50.npz'.format(emb_dim))
 	parser.add_argument('-out_path', help='Path to .pkl classifier generated', default='data/models/wic_linear_bertlast4layers_50.pkl', required=False)
 	parser.add_argument('-device', default='cuda', type=str)
 	args = parser.parse_args()
-
 	return args
 
 
@@ -68,7 +60,6 @@ def wn_lemmatize(w, postag=None):
 		return wn_lemmatizer.lemmatize(w, pos=postag[0].lower())
 	else:
 		return wn_lemmatizer.lemmatize(w)
-
 
 @lru_cache()
 def wn_first_sense(lemma, postag=None):
@@ -102,7 +93,7 @@ def load_wic(setname='train', wic_path='external/wic'):
 		idx1, idx2 = list(map(int, idxs.split('-')))
 		data_entries.append([word, pos_map[pos], idx1, idx2, ex1, ex2])
 
-	if setname == 'test':  # no gold
+	if setname == 'test': 
 		return [e + [None] for e in data_entries]
 
 	gold_entries = []
@@ -164,7 +155,6 @@ def get_bert_embedding(sent):
 			token_vecs.append(encoded_vec)
 			merged_vec = np.array(token_vecs, dtype='float32').mean(axis=0) 
 			merged_vec = torch.from_numpy(merged_vec).to(device)
-			# merged_vec = torch.from_numpy(merged_vec.reshape(768, 1)).to(device)
 		sent_tokens_vecs.append((token, merged_vec))
 
 	return sent_tokens_vecs
@@ -202,7 +192,6 @@ def get_sk_type(sensekey):
 
 def load_gloss_embeddings(path):
 	gloss_embeddings = {}
-	# logging.info("Loading Pre-trained Sense Matrices ...")
 	loader = np.load(path, allow_pickle=True)    # gloss_embeddings is loaded a 0d array
 	loader = np.atleast_1d(loader.f.arr_0)       # convert it to a 1d array with 1 element
 	embeddings = loader[0]				 # a dictionary, key is sense id and value is embeddings
@@ -222,7 +211,6 @@ def load_ares_txt(path):
 				label = splitLine[0]
 				vec = np.array(splitLine[1:], dtype='float32')
 				dim = vec.shape[0]
-				# print('self.dim', self.dim)
 				sense_vecs[label] = vec
 		return sense_vecs
 
@@ -243,12 +231,6 @@ class SensesVSM(object):
 			self.load_npz(self.vecs_path)
 		self.load_aux_senses()
 
-		# self.load_B('data/vectors/paramB.semcor_diagonal_gelu_BiCi_noval_1024_{}_50.npz'.format(300))
-		# self.load_C('data/vectors/paramC.semcor_diagonal_gelu_BiCi_noval_1024_{}_50.npz'.format(300))
-		'''
-		if normalize:
-			self.normalize()
-		'''
 
 	def load_txt(self, txt_vecs_path):
 		self.vectors = []
@@ -277,58 +259,25 @@ class SensesVSM(object):
 		logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(self.A))
 
 
-	# def load_B(self, path):
-	# 	self.matrices = []
-	# 	logging.info("Loading Pre-trained Sense Matrices ...")
-	# 	loader = np.load(path, allow_pickle=True)    # A is loaded a 0d array
-	# 	loader = np.atleast_1d(loader.f.arr_0)       # convert it to a 1d array with 1 element
-	# 	self.B = loader[0]								 # a dictionary, key is sense id and value is sense matrix 
-	# 	self.B_labels = list(self.B.keys())
-	# 	self.B_labels_set = set(self.B_labels)
-	# 	self.B_indices = {l: i for i, l in enumerate(self.B_labels)}
-	# 	logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(self.B))
-
-	# def load_C(self, path):
-	# 	self.matrices = []
-	# 	logging.info("Loading Pre-trained Sense Matrices ...")
-	# 	loader = np.load(path, allow_pickle=True)    # A is loaded a 0d array
-	# 	loader = np.atleast_1d(loader.f.arr_0)       # convert it to a 1d array with 1 element
-	# 	self.C = loader[0]								 # a dictionary, key is sense id and value is sense matrix 
-	# 	self.C_labels = list(self.C.keys())
-	# 	self.C_labels_set = set(self.C_labels)
-	# 	self.C_indices = {l: i for i, l in enumerate(self.C_labels)}
-	# 	logging.info("Done. Loaded %d matrices from Pre-trained Sense Matrices" % len(self.C))
-
-
 	def load_aux_senses(self):
 
 		self.sk_lemmas = {sk: get_sk_lemma(sk) for sk in self.labels}
 		self.sk_postags = {sk: get_sk_pos(sk) for sk in self.labels}
-
 		self.lemma_sks = defaultdict(list)
 		for sk, lemma in self.sk_lemmas.items():
 			self.lemma_sks[lemma].append(sk)
 		self.known_lemmas = set(self.lemma_sks.keys())
-
 		self.sks_by_pos = defaultdict(list)
 		for s in self.labels:
 			self.sks_by_pos[self.sk_postags[s]].append(s)
 		self.known_postags = set(self.sks_by_pos.keys())
 
-	'''
-	def normalize(self, norm='l2'):
-		norms = np.linalg.norm(self.vectors, axis=1)
-		self.vectors = (self.vectors.T / norms).T
-	'''
 
 	def get_A(self, label):
 		if label not in self.A.keys():
 			sense_matrix = None
-
 		else: 
 			sense_matrix = self.A[label]
-
-		# return self.A[self.indices[label]]	## For txt file
 		return sense_matrix	## For npz file
 
 
@@ -339,8 +288,7 @@ class SensesVSM(object):
 			self.inst[sk].append()
 
 
-	def match_senses(self, vec, currVec_g, lemma=None, postag=None, topn=100):
-	# def match_senses(self, vec, lemma=None, postag=None, topn=100):
+	def match_senses(self, currVec_c, currVec_g, lemma=None, postag=None, topn=100):
 		matches = []
 		relevant_sks = []
 		distance = []
@@ -349,63 +297,39 @@ class SensesVSM(object):
 		for sk in self.labels:
 			if (lemma is None) or (self.sk_lemmas[sk] == lemma):
 				if (postag is None) or (self.sk_postags[sk] == postag):
-
 					relevant_sks.append(sk)
-
-
-
-					# cont_vec_c = torch.cat((vec, vec), 0)
-					# sense_vec = torch.from_numpy(ares_embeddings[sk]).to(device)
-					# sim = torch.dot(cont_vec_c, sense_vec) / (cont_vec_c.norm() * sense_vec.norm())
-					# sense_scores.append(sim)
 
 					if sk in self.A.keys():
 						A_matrix = torch.from_numpy(self.A[sk]).to(device)
 						static_sense_vec = A_matrix * currVec_g
 					else:
 						static_sense_vec = currVec_g
-
-					# static_sense_vec = relu(static_sense_vec)
-
-					cont_vec_c = torch.cat((vec, vec), 0)
-					# context_vec = cont_vec_c
-					# context_vec = torch.cat((cont_vec_c, static_sense_vec), 0)
-					context_vec = torch.cat((cont_vec_c, currVec_g), 0)
-										
+					# static_sense_vec = gelu(static_sense_vec)
+					cont_vec = torch.cat((currVec_c, currVec_c), 0)
+					context_vec = torch.cat((currVec_g, cont_vec), 0)
 					ares_vec = torch.from_numpy(ares_embeddings[sk]).to(device)
-					sense_vec = torch.cat((ares_vec, static_sense_vec), 0)
-
+					sense_vec = torch.cat((static_sense_vec, ares_vec), 0)
 					sim = torch.dot(context_vec, sense_vec) / (context_vec.norm() * sense_vec.norm())
 					sense_scores.append(sim)
 		
-
 		matches = list(zip(relevant_sks, sense_scores))
 		matches = sorted(matches, key=lambda x: x[1], reverse=True)
-		# print('matches', matches)
 		return matches[:topn]
-
 
 
 if __name__ == '__main__':
 
 	args = get_args()
-
 	if torch.cuda.is_available() is False and args.device == 'cuda':
 		print("Switching to CPU because Jodie doesn't have a GPU !!")
 		args.device = 'cpu'
-
 	device = torch.device(args.device)
 	
 	# results_path = 'data/results/wic.compare.%s.txt' % args.eval_set
-
-
 	word2id = dict()
 	word2sense = dict()
 
-	
-	# lemmas = []
-	# vectors = []
-	# sense2idx = []
+	relu = nn.ReLU(inplace=True)
 	ares_embeddings = load_ares_txt(args.ares_embedding_path)
 	# lmms = load_lmms(args.lmms_embedding_path)
 	senses_vsm = SensesVSM(args.sv_path, normalize=True)
@@ -413,19 +337,19 @@ if __name__ == '__main__':
 	model = BertModel.from_pretrained('bert-large-cased', output_hidden_states=True)
 	model.eval()
 
+	W = load_weight(args.load_weight_path)
+	W = torch.from_numpy(W).to(device)
+
 	logging.info("Loading Glove Embeddings........")
 	glove_embeddings = load_glove_embeddings(args.glove_embedding_path)
 	logging.info("Done. Loaded words from GloVe embeddings")
 
 	gloss_vecs = load_gloss_embeddings(args.gloss_embedding_path)
 	
-
-
 	logging.info('Processing sentences ...')
 	instances, labels = [], []
 	for wic_idx, wic_entry in enumerate(load_wic(args.eval_set, wic_path='external/wic')):
-		word, postag, idx1, idx2, ex1, ex2, gold = wic_entry
-			
+		word, postag, idx1, idx2, ex1, ex2, gold = wic_entry			
 
 		bert_ex1 = get_bert_embedding(ex1)
 		bert_ex2 = get_bert_embedding(ex2)
@@ -438,24 +362,20 @@ if __name__ == '__main__':
 		else:
 			vec_g1 = torch.from_numpy(glove_embeddings[ex1_curr_lemma]).to(device)
 			ex1_matches = senses_vsm.match_senses(ex1_curr_vector, vec_g1, lemma=ex1_curr_lemma, postag=postag, topn=None)
-	
+			
 		ex1_A_matrix = senses_vsm.get_A(ex1_matches[0][0])
 		if ex1_A_matrix is None:
-			continue
-
+			continue 
 		else:
 			ex1_sense_matric = torch.from_numpy(ex1_A_matrix).to(device)
 			ex1_static_sense_vec = ex1_sense_matric * vec_g1
 
 		ex1_ares_vec = torch.from_numpy(ares_embeddings[ex1_matches[0][0]]).to(device)
-
 		ex1_sense_vec = torch.cat((ex1_ares_vec, ex1_static_sense_vec), 0)
 		ex1_sense_vec = ex1_sense_vec.cpu().detach().numpy()
-
 		ex1_context_vec = torch.cat((ex1_curr_vector, ex1_curr_vector), 0)
 		ex1_context_vec = torch.cat((ex1_context_vec, vec_g1), 0)
 		ex1_context_vec = ex1_context_vec.cpu().detach().numpy()
-
 
 		# example2
 		ex2_curr_word, ex2_curr_vector = bert_ex2[idx2]
@@ -468,7 +388,6 @@ if __name__ == '__main__':
 
 		ex2_A_matrix = senses_vsm.get_A(ex2_matches[0][0])
 		if ex2_A_matrix is None:
-			# ex2_static_sense_vec = vec_g2
 			continue
 		else:
 			ex2_sense_matric = torch.from_numpy(ex2_A_matrix).to(device)
@@ -477,33 +396,23 @@ if __name__ == '__main__':
 		ex2_ares_vec = torch.from_numpy(ares_embeddings[ex2_matches[0][0]]).to(device)
 		ex2_sense_vec = torch.cat((ex2_ares_vec, ex2_static_sense_vec), 0)
 		ex2_sense_vec = ex2_sense_vec.cpu().detach().numpy()
-
 		ex2_context_vec = torch.cat((ex2_curr_vector, ex2_curr_vector), 0)
 		ex2_context_vec = torch.cat((ex2_context_vec, vec_g2), 0)
 		ex2_context_vec = ex2_context_vec.cpu().detach().numpy()
-
-		# '''For baseline ***'''
-		# ex1_best = vec_g1
-		# ex2_best = vec_g2
-
-		# s1_sim = np.dot(ex1_best.cpu().detach(), ex2_best.cpu().detach())	
-		# instances.append([s1_sim])
-		# '''***'''
 
 		s1_sim = np.dot(ex1_context_vec, ex2_context_vec)
 		s2_sim = np.dot(ex1_sense_vec, ex2_sense_vec)
 		s3_sim = np.dot(ex1_context_vec, ex1_sense_vec)
 		s4_sim = np.dot(ex2_context_vec, ex2_sense_vec)
+		s5_sim = np.dot(ex1_context_vec, ex2_sense_vec)
+		s6_sim = np.dot(ex2_context_vec, ex1_sense_vec)
 
-		instances.append([s1_sim, s2_sim, s3_sim, s4_sim])
-
+		instances.append([s1_sim, s2_sim, s3_sim, s4_sim, s5_sim, s6_sim])
 		labels.append(gold)
-
 
 	logging.info('Training Logistic Regression ...')
 	clf = LogisticRegression(random_state=42)
 	clf.fit(instances, labels)
-
 	logging.info('Saving model to %s' % args.out_path)
 	joblib.dump(clf, args.out_path)
 
