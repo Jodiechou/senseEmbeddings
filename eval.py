@@ -31,7 +31,6 @@ def get_args(
 		batch_size = 64,
 		diag = False
 			 ):
-
 	parser = argparse.ArgumentParser(description='WSD Evaluation.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('-glove_embedding_path', default='external/glove/glove.840B.300d.txt')
 	parser.add_argument('--gloss_embedding_path', default='data/vectors/gloss_embeddings.npz')
@@ -55,7 +54,6 @@ def get_args(
 	parser.set_defaults(use_pos=True)
 	parser.set_defaults(debug=True)
 	args = parser.parse_args()
-
 	return args
 
 
@@ -73,7 +71,6 @@ def load_wsd_fw_set(wsd_fw_set_path):
 				inst['pos'].append(e.get('pos'))
 
 			inst['tokens'] = sum([t.split() for t in inst['tokens_mw']], [])
-
 			# handling multi-word expressions, mapping allows matching tokens with mw features
 			idx_map_abs = []
 			idx_map_rel = [(i, list(range(len(t.split()))))
@@ -87,9 +84,7 @@ def load_wsd_fw_set(wsd_fw_set_path):
 			inst['tokenized_sentence'] = ' '.join(inst['tokens'])
 			inst['idx_map_abs'] = idx_map_abs
 			inst['idx'] = sent_idx
-
 			eval_instances.append(inst)
-
 	return eval_instances
 
 
@@ -189,7 +184,6 @@ def get_sk_pos(sk, tagtype='long'):
 	if tagtype == 'long':
 		type2pos = {1: 'NOUN', 2: 'VERB', 3: 'ADJ', 4: 'ADV', 5: 'ADJ'}
 		return type2pos[get_sk_type(sk)]
-
 	elif tagtype == 'short':
 		type2pos = {1: 'n', 2: 'v', 3: 's', 4: 'r', 5: 's'}
 		return type2pos[get_sk_type(sk)]
@@ -270,7 +264,6 @@ def load_glove_embeddings(fn):
 
 def load_gloss_embeddings(path):
 	gloss_embeddings = {}
-	# logging.info("Loading Pre-trained Sense Matrices ...")
 	loader = np.load(path, allow_pickle=True)    # gloss_embeddings is loaded a 0d array
 	loader = np.atleast_1d(loader.f.arr_0)       # convert it to a 1d array with 1 element
 	embeddings = loader[0]				 # a dictionary, key is sense id and value is embeddings
@@ -323,7 +316,6 @@ class SensesVSM(object):
 				self.vectors.append(np.array(list(map(float, elems[1:])), dtype=np.float32))
 				sense_vecs[self.labels] = np.array(list(map(float, elems[1:])), dtype=np.float32)
 		self.vectors = np.vstack(self.vectors)
-
 		self.labels_set = set(self.labels)
 		self.indices = {l: i for i, l in enumerate(self.labels)}
 
@@ -368,7 +360,6 @@ class SensesVSM(object):
 			if (lemma is None) or (self.sk_lemmas[sk] == lemma):
 				if (postag is None) or (self.sk_postags[sk] == postag):
 					relevant_sks.append(sk)
-
 					if sk in self.A.keys():
 						A_matrix = torch.from_numpy(self.A[sk]).to(device)
 						static_sense_vec = A_matrix * currVec_g
@@ -396,7 +387,7 @@ if __name__ == '__main__':
 	args = get_args()
 
 	if torch.cuda.is_available() is False and args.device == 'cuda':
-		print("Switching to CPU because Jodie doesn't have a GPU !!")
+		print("Switching to CPU because no GPU !!")
 		args.device = 'cpu'
 
 	device = torch.device(args.device)
