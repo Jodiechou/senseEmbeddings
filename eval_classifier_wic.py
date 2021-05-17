@@ -340,7 +340,7 @@ if __name__ == '__main__':
 
 	args = get_args()
 	if torch.cuda.is_available() is False and args.device == 'cuda':
-		print("Switching to CPU because Jodie doesn't have a GPU !!")
+		print("Switching to CPU because no GPU !!")
 		args.device = 'cpu'
 	device = torch.device(args.device)
 
