@@ -350,7 +350,7 @@ class SensesVSM(object):
 		self.known_postags = set(self.sks_by_pos.keys())
 
 
-	def match_senses(self, vec, currVec_g, lemma=None, postag=None, topn=100):
+	def match_senses(self, currVec_c, currVec_g, lemma=None, postag=None, topn=100):
 		matches = []
 		relevant_sks = []
 		distance = []
@@ -360,27 +360,23 @@ class SensesVSM(object):
 			if (lemma is None) or (self.sk_lemmas[sk] == lemma):
 				if (postag is None) or (self.sk_postags[sk] == postag):
 					relevant_sks.append(sk)
+
 					if sk in self.A.keys():
 						A_matrix = torch.from_numpy(self.A[sk]).to(device)
 						static_sense_vec = A_matrix * currVec_g
 					else:
 						static_sense_vec = currVec_g
-
+					# static_sense_vec = gelu(static_sense_vec)
 					cont_vec = torch.cat((currVec_c, currVec_c), 0)
-					vec_c = currVec_c.reshape(-1, 1)
-					vec = torch.mm(W, vec_c).squeeze(1)
-					cont_wc_g = torch.mean(torch.stack([vec, currVec_g]), dim=0) ### Compute the mean of Wc(t’,u) and g(u’)
-					context_vec = torch.cat((cont_wc_g, cont_vec), 0) 					
+					context_vec = torch.cat((currVec_g, cont_vec), 0)
 					ares_vec = torch.from_numpy(ares_embeddings[sk]).to(device)
 					sense_vec = torch.cat((static_sense_vec, ares_vec), 0)
-		
 					sim = torch.dot(context_vec, sense_vec) / (context_vec.norm() * sense_vec.norm())
 					sense_scores.append(sim)
-
+		
 		matches = list(zip(relevant_sks, sense_scores))
 		matches = sorted(matches, key=lambda x: x[1], reverse=True)
 		return matches[:topn]
-
 
 if __name__ == '__main__':
 
