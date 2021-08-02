@@ -323,7 +323,7 @@ class SensesVSM(object):
 						static_sense_vec = A_matrix * currVec_g
 					else:
 						static_sense_vec = currVec_g
-
+					# static_sense_vec = gelu(static_sense_vec)
 					cont_vec = torch.cat((currVec_c, currVec_c), 0)
 					context_vec = torch.cat((currVec_g, cont_vec), 0)				
 					ares_vec = torch.from_numpy(ares_embeddings[sk]).to(device)
@@ -340,7 +340,7 @@ if __name__ == '__main__':
 
 	args = get_args()
 	if torch.cuda.is_available() is False and args.device == 'cuda':
-		print("Switching to CPU because no GPU !!")
+		print("Switching to CPU because Jodie doesn't have a GPU !!")
 		args.device = 'cpu'
 	device = torch.device(args.device)
 
@@ -391,17 +391,17 @@ if __name__ == '__main__':
 				
 			ex1_A_matrix = senses_vsm.get_A(ex1_matches[0][0])
 			if ex1_A_matrix is None:
-				continue
+				# continue
+				ex1_static_sense_vec = torch.from_numpy(glove_embeddings[ex1_curr_lemma]).to(device)
 			else:
 				ex1_sense_matric = torch.from_numpy(ex1_A_matrix).to(device)
 				ex1_static_sense_vec = ex1_sense_matric * vec_g1
 
+			# ex1_static_sense_vec = gelu(ex1_static_sense_vec)
 			ex1_ares_vec = torch.from_numpy(ares_embeddings[ex1_matches[0][0]]).to(device)
 			ex1_sense_vec = torch.cat((ex1_ares_vec, ex1_static_sense_vec), 0)
-			ex1_sense_vec = ex1_sense_vec.cpu().detach().numpy()
 			ex1_context_vec = torch.cat((ex1_curr_vector, ex1_curr_vector), 0)
 			ex1_context_vec = torch.cat((ex1_context_vec, vec_g1), 0)
-			ex1_context_vec = ex1_context_vec.cpu().detach().numpy()
 
 			# example2
 			ex2_curr_word, ex2_curr_vector = bert_ex2[idx2]
@@ -415,25 +415,57 @@ if __name__ == '__main__':
 			
 			ex2_A_matrix = senses_vsm.get_A(ex2_matches[0][0])
 			if ex2_A_matrix is None:
-				continue
+				# continue
+				ex2_static_sense_vec = torch.from_numpy(glove_embeddings[ex2_curr_lemma]).to(device)
 			else:
 				ex2_sense_matric = torch.from_numpy(ex2_A_matrix).to(device)
 				ex2_static_sense_vec = ex2_sense_matric * vec_g2
 
+			# ex2_static_sense_vec = gelu(ex2_static_sense_vec)
 			ex2_ares_vec = torch.from_numpy(ares_embeddings[ex2_matches[0][0]]).to(device)
 			ex2_sense_vec = torch.cat((ex2_ares_vec, ex2_static_sense_vec), 0)
-			ex2_sense_vec = ex2_sense_vec.cpu().detach().numpy()
 			ex2_context_vec = torch.cat((ex2_curr_vector, ex2_curr_vector), 0)
 			ex2_context_vec = torch.cat((ex2_context_vec, vec_g2), 0)
-			ex2_context_vec = ex2_context_vec.cpu().detach().numpy()
 			n_instances += 1
+
+			cont_vecs = torch.cat((ex1_context_vec, ex2_context_vec, ex1_sense_vec, ex2_sense_vec))
+			cont_vecs = cont_vecs.cpu().detach().numpy()
+
+			ex1_sense_vec = ex1_sense_vec.cpu().detach().numpy()
+			ex2_sense_vec = ex2_sense_vec.cpu().detach().numpy()
+			ex1_context_vec = ex1_context_vec.cpu().detach().numpy()
+			ex2_context_vec = ex2_context_vec.cpu().detach().numpy()
+
 			s1_sim = np.dot(ex1_context_vec, ex2_context_vec)
 			s2_sim = np.dot(ex1_sense_vec, ex2_sense_vec)
 			s3_sim = np.dot(ex1_context_vec, ex1_sense_vec)
 			s4_sim = np.dot(ex2_context_vec, ex2_sense_vec)
 			s5_sim = np.dot(ex1_context_vec, ex2_sense_vec)
 			s6_sim = np.dot(ex2_context_vec, ex1_sense_vec)
-			pred = clf.predict([[s1_sim, s2_sim, s3_sim, s4_sim, s5_sim, s6_sim]])[0]
+
+			f1 = ex1_sense_vec * ex2_sense_vec
+			f2 = ex1_sense_vec * ex1_context_vec
+			f3 = ex1_sense_vec * ex2_context_vec
+			f4 = ex2_sense_vec * ex1_context_vec
+			f5 = ex2_sense_vec * ex2_context_vec
+			f6 = ex1_context_vec * ex2_context_vec
+
+			f7 = ex1_sense_vec - ex2_sense_vec
+			f8 = ex1_sense_vec - ex1_context_vec
+			f9 = ex1_sense_vec - ex2_context_vec
+			f10 = ex2_context_vec - ex1_context_vec
+			f11 = ex2_sense_vec - ex2_context_vec
+			f12 = ex1_context_vec - ex2_context_vec
+
+			# final_cont = np.concatenate((f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12), axis=None)
+			# final_cont = np.concatenate((f1, f2, f3, f4, f5, f6), axis=None)
+
+			# print('shape of cont_vecs', cont_vecs.shape, 'shape of s1_sim', s1_sim.shape)
+
+			# final_cont = np.concatenate((cont_vecs, [s1_sim], [s2_sim], [s3_sim], [s4_sim], [s5_sim], [s6_sim]), axis=0)
+
+			# pred = clf.predict([[s1_sim, s2_sim, s3_sim, s4_sim, s5_sim, s6_sim]])[0]
+			pred = clf.predict([cont_vecs])[0]
 			
 			if pred == True:
 				results_f.write('T\n')
